@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
 import {
   fetchUserPredictions, saveMatchPredictions, calcPoints,
+  fetchUserBonusPredictions, saveBonusPredictions,
 } from '../services/predictionsService'
+import { searchTeams, searchPlayers } from '../services/teamsService'
+import { fetchTournamentRanking } from '../services/rankingService'
+import { supabase } from '../lib/supabase'
 import type { Tournament } from '../services/tournamentsService'
 import type { CompetitionMatch } from '../services/matchesService'
-import type { MatchPrediction } from '../services/predictionsService'
+import type { BonusPrediction } from '../services/predictionsService'
+import type { TeamOption, PlayerOption } from '../services/teamsService'
+import type { RankingEntry } from '../services/rankingService'
 
 // ─── Tipos locales ────────────────────────────────────────────────
 
@@ -164,11 +170,14 @@ function MatchRow({
       })
     : '—'
 
+  const isPast = match.home_score != null ||
+    (match.match_date != null && new Date(match.match_date) < new Date())
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-border/40 last:border-0">
+    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${isPast ? 'bg-black/20' : ''}`}>
       {/* Equipo local */}
       <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-        <span className="text-text text-sm font-medium truncate text-right hidden sm:block">
+        <span className={`text-sm font-medium truncate text-right hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
           {match.home_team?.name ?? '—'}
         </span>
         <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
@@ -184,7 +193,7 @@ function MatchRow({
       {/* Equipo visitante */}
       <div className="flex-1 flex items-center gap-2 min-w-0">
         <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
-        <span className="text-text text-sm font-medium truncate hidden sm:block">
+        <span className={`text-sm font-medium truncate hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
           {match.away_team?.name ?? '—'}
         </span>
       </div>
@@ -282,6 +291,376 @@ function GroupStandingsTable({
   )
 }
 
+const POSITION_ES: Record<string, string> = {
+  'Goalkeeper': 'Arquero',
+  'Defender':   'Defensor',
+  'Midfielder': 'Mediocampista',
+  'Attacker':   'Delantero',
+  'Forward':    'Delantero',
+}
+
+// ─── Tipos para bonus ─────────────────────────────────────────────
+
+interface SelectedTeam   { id: string; name: string; logo_url: string | null }
+interface SelectedPlayer { id: string; name: string; photo_url: string | null; team: string | null }
+
+// ─── Autocomplete equipo ──────────────────────────────────────────
+
+function AutocompleteTeam({
+  value, onSelect, locked, teamType, placeholder,
+}: {
+  value:       SelectedTeam | null
+  onSelect:    (t: SelectedTeam | null) => void
+  locked:      boolean
+  teamType?:   'national' | 'club'
+  placeholder: string
+}) {
+  const [query,     setQuery]     = useState('')
+  const [results,   setResults]   = useState<TeamOption[]>([])
+  const [open,      setOpen]      = useState(false)
+  const [searching, setSearching] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const r = await searchTeams(query, teamType)
+        setResults(r)
+        setOpen(true)
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query, teamType])
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border">
+        <TeamLogo url={value.logo_url} name={value.name} size={20} />
+        <span className="text-text text-sm font-medium flex-1 truncate">{value.name}</span>
+        {!locked && (
+          <button onClick={() => onSelect(null)} className="text-muted hover:text-text shrink-0">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border focus-within:border-brand transition-colors">
+        <Search size={14} className="text-muted shrink-0" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => results.length && setOpen(true)}
+          disabled={locked}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-text text-sm outline-none placeholder:text-muted-dark disabled:opacity-40 disabled:cursor-not-allowed"
+        />
+        {searching && <Loader2 size={12} className="text-muted animate-spin shrink-0" />}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-elevated z-20 max-h-48 overflow-y-auto">
+          {results.map(r => (
+            <button
+              key={r.id}
+              onMouseDown={() => { onSelect({ id: r.id, name: r.name, logo_url: r.logo_url }); setQuery(''); setOpen(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-elevated transition-colors text-left"
+            >
+              <TeamLogo url={r.logo_url} name={r.name} size={18} />
+              <span className="text-text text-sm flex-1 truncate">{r.name}</span>
+              {r.country && <span className="text-muted text-xs shrink-0">{r.country}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Autocomplete jugador ─────────────────────────────────────────
+
+function AutocompletePlayer({
+  value, onSelect, locked, competitionId, placeholder,
+}: {
+  value:         SelectedPlayer | null
+  onSelect:      (p: SelectedPlayer | null) => void
+  locked:        boolean
+  competitionId: string
+  placeholder:   string
+}) {
+  const [query,     setQuery]     = useState('')
+  const [results,   setResults]   = useState<PlayerOption[]>([])
+  const [open,      setOpen]      = useState(false)
+  const [searching, setSearching] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); setOpen(false); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const r = await searchPlayers(query, competitionId)
+        setResults(r)
+        setOpen(true)
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query, competitionId])
+
+  if (value) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border">
+        {value.photo_url
+          ? <img src={value.photo_url} alt={value.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+          : <div className="w-6 h-6 rounded-full bg-elevated flex items-center justify-center text-[9px] font-bold text-muted border border-border shrink-0">{value.name.slice(0,2).toUpperCase()}</div>
+        }
+        <div className="flex-1 min-w-0">
+          <p className="text-text text-sm font-medium truncate">{value.name}</p>
+          {value.team && <p className="text-muted text-[11px] truncate">{value.team}</p>}
+        </div>
+        {!locked && (
+          <button onClick={() => onSelect(null)} className="text-muted hover:text-text shrink-0">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border focus-within:border-brand transition-colors">
+        <Search size={14} className="text-muted shrink-0" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => results.length && setOpen(true)}
+          disabled={locked}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-text text-sm outline-none placeholder:text-muted-dark disabled:opacity-40 disabled:cursor-not-allowed"
+        />
+        {searching && <Loader2 size={12} className="text-muted animate-spin shrink-0" />}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-elevated z-20 max-h-48 overflow-y-auto">
+          {results.map(r => (
+            <button
+              key={r.id}
+              onMouseDown={() => {
+                onSelect({ id: r.id, name: r.name, photo_url: r.photo_url, team: (r.team as any)?.name ?? null })
+                setQuery('')
+                setOpen(false)
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-elevated transition-colors text-left"
+            >
+              {r.photo_url
+                ? <img src={r.photo_url} alt={r.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                : <div className="w-6 h-6 rounded-full bg-elevated flex items-center justify-center text-[9px] font-bold text-muted border border-border shrink-0">{r.name.slice(0,2).toUpperCase()}</div>
+              }
+              <div className="flex-1 min-w-0">
+                <p className="text-text text-sm truncate">{r.name}</p>
+                {(r.team as any)?.name && <p className="text-muted text-[11px] truncate">{(r.team as any).name}</p>}
+              </div>
+              {r.position && <span className="text-muted text-xs shrink-0">{POSITION_ES[r.position] ?? r.position}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Tab Bonus ────────────────────────────────────────────────────
+
+const RANK_META = [
+  { rank: 1 as const, label: '1ª opción', pts: 10, medal: '🥇' },
+  { rank: 2 as const, label: '2ª opción', pts: 5,  medal: '🥈' },
+  { rank: 3 as const, label: '3ª opción', pts: 3,  medal: '🥉' },
+]
+
+function BonusTab({ tournament, locked }: { tournament: Tournament; locked: boolean }) {
+  const [champions, setChampions] = useState<[SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]>([null, null, null])
+  const [scorers,   setScorers]   = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
+  const [saving,    setSaving]    = useState(false)
+  const [saved,     setSaved]     = useState(false)
+  const [loading,   setLoading]   = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const bonuses = await fetchUserBonusPredictions(tournament.id)
+        const newChamps: [SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]   = [null, null, null]
+        const newScores: [SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null] = [null, null, null]
+        for (const b of bonuses) {
+          if (b.type === 'champion' && b.rank >= 1 && b.rank <= 3 && b.team_name) {
+            newChamps[b.rank - 1] = { id: b.team_id!, name: b.team_name, logo_url: null }
+          }
+          if (b.type === 'top_scorer' && b.rank >= 1 && b.rank <= 3 && b.player_name) {
+            newScores[b.rank - 1] = { id: b.player_id!, name: b.player_name, photo_url: null, team: null }
+          }
+        }
+        setChampions(newChamps)
+        setScorers(newScores)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [tournament.id])
+
+  async function handleSave() {
+    if (locked) return
+    setSaving(true)
+    try {
+      const bonuses: BonusPrediction[] = []
+      champions.forEach((c, i) => {
+        if (c) bonuses.push({ tournament_id: tournament.id, type: 'champion', rank: (i + 1) as 1|2|3, team_id: c.id, team_name: c.name })
+      })
+      scorers.forEach((s, i) => {
+        if (s) bonuses.push({ tournament_id: tournament.id, type: 'top_scorer', rank: (i + 1) as 1|2|3, player_id: s.id, player_name: s.name })
+      })
+      await saveBonusPredictions(tournament.id, bonuses)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={24} className="text-brand animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+
+      {/* Descripción */}
+      <div className="bg-brand/10 border border-brand/25 rounded-xl px-4 py-3">
+        <p className="text-sm text-text">
+          Elegí hasta <span className="font-semibold text-brand">3 opciones</span> para el campeón y el goleador del torneo.
+          Si acertás con tu <span className="font-semibold">1ª opción</span> sumás <span className="font-semibold">10 pts</span>, con la <span className="font-semibold">2ª</span> sumás <span className="font-semibold">5 pts</span> y con la <span className="font-semibold">3ª</span> sumás <span className="font-semibold">3 pts</span>.
+        </p>
+      </div>
+
+      {/* Campeón */}
+      <div className="card">
+        <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
+          <Trophy size={16} className="text-brand" />
+          <h3 className="text-text text-sm font-semibold">Campeón del Torneo</h3>
+          <span className="text-muted text-xs ml-auto">si acertás con tu opción</span>
+        </div>
+        <div className="p-4 space-y-3">
+          {RANK_META.map(({ rank, label, pts, medal }) => (
+            <div key={rank} className="flex items-center gap-3">
+              <div className="w-28 shrink-0 flex items-center gap-1.5">
+                <span className="text-lg leading-none">{medal}</span>
+                <div>
+                  <p className="text-text text-xs font-semibold">{label}</p>
+                  <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
+                </div>
+              </div>
+              <div className="flex-1">
+                <AutocompleteTeam
+                  value={champions[rank - 1]}
+                  onSelect={t => setChampions(prev => {
+                    const next = [...prev] as typeof prev
+                    next[rank - 1] = t
+                    return next
+                  })}
+                  locked={locked}
+                  teamType={tournament.team_type}
+                  placeholder="Buscar equipo..."
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Goleador */}
+      {tournament.competition_id && (
+        <div className="card">
+          <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
+            <Star size={16} className="text-brand" />
+            <h3 className="text-text text-sm font-semibold">Goleador del Torneo</h3>
+            <span className="text-muted text-xs ml-auto">si acertás con tu opción</span>
+          </div>
+          <div className="p-4 space-y-3">
+            {RANK_META.map(({ rank, label, pts, medal }) => (
+              <div key={rank} className="flex items-center gap-3">
+                <div className="w-28 shrink-0 flex items-center gap-1.5">
+                  <span className="text-lg leading-none">{medal}</span>
+                  <div>
+                    <p className="text-text text-xs font-semibold">{label}</p>
+                    <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <AutocompletePlayer
+                    value={scorers[rank - 1]}
+                    onSelect={p => setScorers(prev => {
+                      const next = [...prev] as typeof prev
+                      next[rank - 1] = p
+                      return next
+                    })}
+                    locked={locked}
+                    competitionId={tournament.competition_id!}
+                    placeholder="Buscar jugador..."
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Guardar */}
+      {!locked && (
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn-primary flex items-center gap-2"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
+            {saved ? 'Guardado' : 'Guardar Bonus'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Página principal ─────────────────────────────────────────────
 
 export default function TournamentProdePage() {
@@ -294,7 +673,22 @@ export default function TournamentProdePage() {
   const [loading,    setLoading]    = useState(true)
   const [saving,     setSaving]     = useState(false)
   const [saved,      setSaved]      = useState(false)
-  const [tab,        setTab]        = useState<'groups' | 'knockout' | 'bonus'>('groups')
+  const [tab,        setTab]        = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
+  const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
+  const [rankingLoading, setRankingLoading] = useState(false)
+  const [myUserId,   setMyUserId]   = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setMyUserId(data.user?.id ?? null))
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'ranking' || !id) return
+    setRankingLoading(true)
+    fetchTournamentRanking(id)
+      .then(setRankingEntries)
+      .finally(() => setRankingLoading(false))
+  }, [tab, id])
 
   useEffect(() => {
     if (!id) return
@@ -391,6 +785,7 @@ export default function TournamentProdePage() {
     { key: 'groups',   label: 'Fase de Grupos' },
     ...(config?.has_knockout ? [{ key: 'knockout', label: 'Eliminatoria' }] : []),
     ...(config?.has_bonus    ? [{ key: 'bonus',    label: 'Bonus' }]       : []),
+    { key: 'ranking',  label: 'Ranking' },
   ] as { key: typeof tab; label: string }[]
 
   // Conteo de predicciones completas
@@ -404,7 +799,8 @@ export default function TournamentProdePage() {
     <div className="p-6 space-y-5 max-w-5xl">
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-2">
+        {/* Fila 1: back + nombre */}
         <div className="flex items-start gap-3">
           <button
             onClick={() => navigate('/torneos')}
@@ -412,14 +808,16 @@ export default function TournamentProdePage() {
           >
             <ChevronLeft size={18} />
           </button>
-          <div>
-            <h1 className="text-text text-xl font-semibold tracking-tight">{tournament.name}</h1>
+          <div className="min-w-0">
+            <h1 className="text-text text-xl font-semibold tracking-tight leading-tight">{tournament.name}</h1>
             <p className="text-muted text-sm mt-1">
               {tournament.competition?.name ?? ''} · Prode
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+
+        {/* Fila 2: estado / acciones */}
+        <div className="flex items-center justify-between gap-3 pl-11">
           {locked ? (
             <div className="flex items-center gap-2 text-muted text-sm">
               <Lock size={14} />
@@ -433,7 +831,7 @@ export default function TournamentProdePage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="btn-primary flex items-center gap-2"
+                className="btn-primary flex items-center gap-2 shrink-0"
               >
                 {saving ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -524,14 +922,106 @@ export default function TournamentProdePage() {
 
       {/* ── Bonus ── */}
       {tab === 'bonus' && (
-        <div className="card p-10 text-center text-muted">
-          <p className="text-sm">Bonus disponible próximamente.</p>
-          <p className="text-xs text-muted-dark mt-1">
-            Selección de campeón y goleador del torneo.
-          </p>
-        </div>
+        <BonusTab tournament={tournament} locked={locked} />
       )}
 
+      {/* ── Ranking ── */}
+      {tab === 'ranking' && (
+        <ProdeRankingTab
+          entries={rankingEntries}
+          loading={rankingLoading}
+          myUserId={myUserId}
+        />
+      )}
+
+    </div>
+  )
+}
+
+// ─── Ranking tab (inline) ─────────────────────────────────────────
+
+function RankingAvatar({ url, name }: { url: string | null; name: string }) {
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  if (url) return <img src={url} alt={name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+  return (
+    <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center shrink-0">
+      <span className="text-brand text-[11px] font-bold">{initials}</span>
+    </div>
+  )
+}
+
+function medalFor(rank: number): string {
+  if (rank === 1) return '🥇'
+  if (rank === 2) return '🥈'
+  if (rank === 3) return '🥉'
+  return ''
+}
+
+function ProdeRankingTab({
+  entries, loading, myUserId,
+}: {
+  entries: RankingEntry[]
+  loading: boolean
+  myUserId: string | null
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 size={24} className="text-brand animate-spin" />
+      </div>
+    )
+  }
+
+  if (!entries.length) {
+    return <p className="text-muted text-sm text-center py-12">Aún no hay participantes con predicciones.</p>
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Header */}
+      <div className="grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-2.5 border-b border-border bg-elevated/60">
+        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">#</span>
+        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">Jugador</span>
+        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Partidos</span>
+        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Bonus</span>
+        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Total</span>
+      </div>
+
+      {entries.map((entry, idx) => {
+        const isMe    = entry.userId === myUserId
+        const medal   = entry.rank > 0 ? medalFor(entry.rank) : ''
+        const rankLabel = entry.rank > 0 ? (medal || `#${entry.rank}`) : '—'
+
+        return (
+          <div
+            key={entry.userId}
+            className={[
+              'grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-3 items-center',
+              idx < entries.length - 1 ? 'border-b border-border/50' : '',
+              isMe ? 'bg-brand/5' : '',
+            ].join(' ')}
+          >
+            <span className={`text-sm font-bold leading-none ${isMe ? 'text-brand' : 'text-muted'}`}>
+              {rankLabel}
+            </span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <RankingAvatar url={entry.avatarUrl} name={entry.displayName} />
+              <div className="min-w-0">
+                <p className={`text-sm font-medium truncate leading-tight ${isMe ? 'text-brand' : 'text-text'}`}>
+                  {entry.displayName}
+                  {isMe && <span className="text-[10px] ml-1 opacity-60">(vos)</span>}
+                </p>
+                <p className="text-muted text-[10px] mt-0.5">{entry.matchesScored} resultados</p>
+              </div>
+            </div>
+            <span className="text-text text-sm font-semibold text-right">{entry.matchPts}</span>
+            <span className="text-text text-sm font-semibold text-right">{entry.bonusPts}</span>
+            <span className={`text-sm font-bold text-right ${isMe ? 'text-brand' : 'text-text'}`}>
+              {entry.totalPts}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }

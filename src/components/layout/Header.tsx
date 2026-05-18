@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Search, Bell, ChevronDown, PanelLeftClose, PanelLeftOpen, User, LogOut, Target, Users, Megaphone, Mail } from 'lucide-react'
+import { Bell, ChevronDown, PanelLeftClose, PanelLeftOpen, User, LogOut, Target, Users, Megaphone, Mail } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAppStore } from '../../store/useAppStore'
 import { useNotificationsStore } from '../../store/useNotificationsStore'
@@ -21,7 +21,7 @@ export default function Header() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
 
-  const { sidebarCollapsed, toggleSidebar } = useAppStore()
+  const { sidebarCollapsed, toggleSidebar, openMobileMenu } = useAppStore()
   const { notifications, unreadCount, fetch: fetchNotifs, markAsRead, markAllAsRead } = useNotificationsStore()
   const { count: requestsCount, fetchCount: fetchRequestsCount } = useRequestsStore()
   const { profile } = useAuth()
@@ -90,14 +90,21 @@ export default function Header() {
   return (
     <header className="h-14 bg-surface border-b border-border flex items-center px-4 gap-3 shrink-0 z-40">
 
-      {/* Logo */}
+      {/* Logo — mobile: botón que abre el drawer, desktop: logo normal */}
+      <button
+        onClick={openMobileMenu}
+        className="lg:hidden flex items-center shrink-0 p-1 rounded-lg hover:bg-elevated transition-colors"
+      >
+        <img src={isotipo} alt="HinchaHub" className="h-10 w-10 object-contain" />
+      </button>
+
       <div
-        className="flex items-center shrink-0 overflow-hidden transition-all duration-300"
+        className="hidden lg:flex items-center shrink-0 overflow-hidden transition-all duration-300"
         style={{ width: sidebarCollapsed ? 56 : 156 }}
       >
         {sidebarCollapsed
-          ? <img src={isotipo}   alt="HinchaHub" className="h-8 w-8 object-contain mx-auto" />
-          : <img src={logoFull} alt="HinchaHub" className="h-9 w-auto object-contain" />
+          ? <img src={isotipo}   alt="HinchaHub" className="h-10 w-10 object-contain mx-auto" />
+          : <img src={logoFull}  alt="HinchaHub" className="h-9 w-auto object-contain" />
         }
       </div>
 
@@ -112,17 +119,6 @@ export default function Header() {
           : <PanelLeftClose size={17} strokeWidth={1.8} />
         }
       </button>
-
-      {/* Search */}
-      <div className="flex-1 max-w-md relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-dark" />
-        <input
-          type="text"
-          placeholder="Buscar torneos, usuarios..."
-          className="w-full bg-elevated border border-border rounded-lg pl-9 pr-14 py-2 text-sm text-text placeholder:text-muted-dark focus:outline-none focus:border-brand transition-colors"
-        />
-        <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-dark bg-border px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
-      </div>
 
       <div className="flex-1" />
 

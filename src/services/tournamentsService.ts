@@ -65,6 +65,7 @@ export async function fetchTournaments(): Promise<Tournament[]> {
     .select(`
       id, name, description, image_url, access_type,
       max_participants, status, created_by, competition_id,
+      team_type, prode_config, prediction_deadline,
       created_at, updated_at,
       competition:competitions(name, logo_url, country),
       participant_count:tournament_registrations(count)
@@ -139,6 +140,11 @@ export async function createTournament(data: CreateTournamentData): Promise<Tour
     .single()
 
   if (error) throw new Error(error.message)
+
+  // Auto-inscribir al creador como participante
+  await supabase
+    .from('tournament_registrations')
+    .insert({ tournament_id: created.id, user_id: user.id })
 
   // Disparar sync-fixtures en background sin bloquear la respuesta
   supabase.functions.invoke('sync-fixtures').catch(() => {})

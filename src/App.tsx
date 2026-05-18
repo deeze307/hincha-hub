@@ -11,6 +11,7 @@ import TournamentsPage from './pages/TournamentsPage'
 import TournamentFormPage from './pages/TournamentFormPage'
 import RequestsPage from './pages/RequestsPage'
 import TournamentProdePage from './pages/TournamentProdePage'
+import TournamentRankingPage from './pages/TournamentRankingPage'
 
 export default function App() {
   return (
@@ -22,7 +23,8 @@ export default function App() {
           <Route path="/torneos"              element={<TournamentsPage />} />
           <Route path="/torneos/nuevo"        element={<TournamentFormPage />} />
           <Route path="/torneos/:id/editar"   element={<TournamentFormPage />} />
-          <Route path="/torneos/:id/prode"   element={<TournamentProdePage />} />
+          <Route path="/torneos/:id/prode"    element={<TournamentProdePage />} />
+          <Route path="/torneos/:id/ranking"  element={<TournamentRankingPage />} />
           <Route path="/solicitudes"          element={<RequestsPage />} />
           <Route path="/partidos"             element={<ComingSoon title="Partidos" />} />
           <Route path="/predecir"             element={<ProdePage />} />

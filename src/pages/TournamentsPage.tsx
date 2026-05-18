@@ -166,40 +166,38 @@ function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, o
           )}
         </div>
 
-        {/* Participants */}
-        <div className="flex items-center gap-1.5 text-muted text-xs">
-          <Users size={12} />
-          <span>
-            {participantN}
-            {t.max_participants != null && ` / ${t.max_participants}`}
-            {' '}participantes
-          </span>
+        {/* Participants + Editar */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-muted text-xs">
+            <Users size={12} />
+            <span>
+              {participantN}
+              {t.max_participants != null && ` / ${t.max_participants}`}
+              {' '}participantes
+            </span>
+          </div>
+          {canManage && (
+            <button onClick={onManage} className="btn-secondary text-[11px] py-1 px-2.5 shrink-0">
+              Editar
+            </button>
+          )}
         </div>
 
-        {/* Actions */}
-        <div className="mt-auto flex gap-2">
-          {canManage ? (
-            <div className="flex gap-2 flex-1">
-              <button onClick={onProde} className="btn-primary flex-1 text-xs py-2 flex items-center justify-center gap-1">
-                Ver Prode <ChevronRight size={13} />
-              </button>
-              <button onClick={onManage} className="btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1">
-                Editar
-              </button>
-            </div>
-          ) : t.is_registered ? (
-            <button onClick={onProde} className="btn-primary flex-1 text-xs py-2 flex items-center justify-center gap-1">
-              Mi Prode <ChevronRight size={13} />
+        {/* Action */}
+        <div className="mt-auto">
+          {(canManage || t.is_registered) ? (
+            <button onClick={onProde} className="btn-primary w-full text-xs py-2 flex items-center justify-center gap-1">
+              Ver Prode <ChevronRight size={13} />
             </button>
           ) : t.has_pending_request ? (
-            <span className="flex-1 text-center text-xs text-yellow-400 font-semibold py-2">Solicitud enviada</span>
+            <span className="block w-full text-center text-xs text-yellow-400 font-semibold py-2">Solicitud enviada</span>
           ) : isFull ? (
-            <span className="flex-1 text-center text-xs text-muted py-2">Torneo lleno</span>
+            <span className="block w-full text-center text-xs text-muted py-2">Torneo lleno</span>
           ) : (
             <button
               onClick={onJoin}
               disabled={joining}
-              className="btn-primary flex-1 text-xs py-2"
+              className="btn-primary w-full text-xs py-2"
             >
               {joining ? <Loader2 size={13} className="animate-spin" /> :
                t.access_type === 'open' ? 'Unirse' : 'Solicitar ingreso'}

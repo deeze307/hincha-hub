@@ -11,10 +11,102 @@ const API_BASE = 'https://v3.football.api-sports.io'
 
 async function apiFetch(path: string) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'x-apisports-key': API_KEY },
+    headers: { 'x-apisports-key': API_KEY, 'x-apisports-language': 'es' },
   })
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
   return res.json()
+}
+
+const ES: Record<string, string> = {
+  'France':               'Francia',
+  'Germany':              'Alemania',
+  'England':              'Inglaterra',
+  'Netherlands':          'Países Bajos',
+  'Switzerland':          'Suiza',
+  'Denmark':              'Dinamarca',
+  'Sweden':               'Suecia',
+  'Norway':               'Noruega',
+  'Poland':               'Polonia',
+  'Czech Republic':       'República Checa',
+  'Hungary':              'Hungría',
+  'Romania':              'Rumanía',
+  'Slovakia':             'Eslovaquia',
+  'Slovenia':             'Eslovenia',
+  'Ukraine':              'Ucrania',
+  'Greece':               'Grecia',
+  'Turkey':               'Turquía',
+  'Croatia':              'Croacia',
+  'South Korea':          'Corea del Sur',
+  'Japan':                'Japón',
+  'Australia':            'Australia',
+  'Saudi Arabia':         'Arabia Saudita',
+  'Iran':                 'Irán',
+  'Morocco':              'Marruecos',
+  'Cameroon':             'Camerún',
+  'Tunisia':              'Túnez',
+  'Algeria':              'Argelia',
+  'Ivory Coast':          'Costa de Marfil',
+  'Egypt':                'Egipto',
+  'South Africa':         'Sudáfrica',
+  'Congo DR':             'R.D. del Congo',
+  'Mali':                 'Malí',
+  'Canada':               'Canadá',
+  'USA':                  'Estados Unidos',
+  'United States':        'Estados Unidos',
+  'Mexico':               'México',
+  'Brazil':               'Brasil',
+  'Peru':                 'Perú',
+  'Panama':               'Panamá',
+  'Wales':                'Gales',
+  'Scotland':             'Escocia',
+  'Qatar':                'Catar',
+  'Bosnia & Herzegovina': 'Bosnia y Herzegovina',
+  'North Macedonia':      'Macedonia del Norte',
+  'New Zealand':          'Nueva Zelanda',
+  'Trinidad and Tobago':  'Trinidad y Tobago',
+  'Dominican Republic':   'República Dominicana',
+  'Senegal':              'Senegal',
+  'Nigeria':              'Nigeria',
+  'Ghana':                'Ghana',
+  'Ecuador':              'Ecuador',
+  'Colombia':             'Colombia',
+  'Venezuela':            'Venezuela',
+  'Bolivia':              'Bolivia',
+  'Paraguay':             'Paraguay',
+  'Chile':                'Chile',
+  'Uruguay':              'Uruguay',
+  'Argentina':            'Argentina',
+  'Portugal':             'Portugal',
+  'Spain':                'España',
+  'Italy':                'Italia',
+  'Belgium':              'Bélgica',
+  'Serbia':               'Serbia',
+  'Austria':              'Austria',
+  'Costa Rica':           'Costa Rica',
+  'Honduras':             'Honduras',
+  'Jamaica':              'Jamaica',
+  'El Salvador':          'El Salvador',
+  'Jordan':               'Jordania',
+  'Cape Verde Islands':   'Cabo Verde',
+  'Cape Verde':           'Cabo Verde',
+}
+
+function esName(name: string | null): string | null {
+  if (!name) return null
+  return ES[name] ?? name
+}
+
+const POSITION_ES: Record<string, string> = {
+  'Goalkeeper': 'Arquero',
+  'Defender':   'Defensor',
+  'Midfielder': 'Mediocampista',
+  'Attacker':   'Delantero',
+  'Forward':    'Delantero',
+}
+
+function esPosition(pos: string | null): string | null {
+  if (!pos) return null
+  return POSITION_ES[pos] ?? pos
 }
 
 function flagUrl(nationality: string | null): string | null {
@@ -40,107 +132,135 @@ function flagUrl(nationality: string | null): string | null {
   return code ? `https://flagcdn.com/w40/${code}.png` : null
 }
 
+async function syncCompetition(
+  leagueId:      number,
+  season:        number,
+  teamType:      string,
+  competitionId: string,
+): Promise<{ teams: number; players: number }> {
+  // Sync teams
+  const teamsData = await apiFetch(`/teams?league=${leagueId}&season=${season}`)
+  const teamsRaw  = teamsData?.response ?? []
+  if (!teamsRaw.length) return { teams: 0, players: 0 }
+
+  const teamRows = teamsRaw.map((t: any) => ({
+    external_id: t.team.id,
+    name:        esName(t.team.name) ?? t.team.name,
+    logo_url:    t.team.logo,
+    country:     esName(t.team.country) ?? t.team.country,
+    type:        teamType,
+  }))
+
+  const { error: teamsErr } = await supabase
+    .from('teams')
+    .upsert(teamRows, { onConflict: 'external_id' })
+  if (teamsErr) throw teamsErr
+
+  const externalIds = teamRows.map((t: any) => t.external_id)
+  const { data: dbTeams } = await supabase
+    .from('teams')
+    .select('id, external_id')
+    .in('external_id', externalIds)
+
+  const teamMap = new Map((dbTeams ?? []).map((t: any) => [t.external_id, t.id]))
+
+  // Sync players (squad por equipo)
+  let totalPlayers = 0
+  for (const t of teamsRaw) {
+    const squadData = await apiFetch(`/players/squads?team=${t.team.id}`)
+    const squad     = squadData?.response?.[0]?.players ?? []
+
+    const playerRows = squad.map((p: any) => ({
+      external_id:    p.id,
+      competition_id: competitionId,
+      name:           p.name,
+      photo_url:      p.photo,
+      nationality:    esName(p.nationality ?? null),
+      flag_url:       flagUrl(p.nationality ?? null),
+      team_id:        teamMap.get(t.team.id) ?? null,
+      position:       esPosition(p.position ?? null),
+      updated_at:     new Date().toISOString(),
+    }))
+
+    if (playerRows.length) {
+      const { error } = await supabase
+        .from('players')
+        .upsert(playerRows, { onConflict: 'external_id,competition_id' })
+      if (error) console.error(`Players upsert error (team ${t.team.id}):`, error)
+      else totalPlayers += playerRows.length
+    }
+
+    await new Promise(r => setTimeout(r, 200))
+  }
+
+  return { teams: teamRows.length, players: totalPlayers }
+}
+
 Deno.serve(async (req) => {
   try {
-    // Body esperado: { league_id, season, team_type }
-    let leagueId: number | null            = null
-    let season:   number | null            = null
-    let teamType: 'national' | 'club'      = 'club'
+    // Body opcional: { league_id, season, team_type } para forzar una competencia específica
+    // Sin body: auto-detecta todas las competencias con torneos activos
+    let forcedLeagueId: number | null = null
+    let forcedSeason:   number | null = null
+    let forcedTeamType: string | null = null
 
     try {
       const body = await req.json()
-      leagueId = body.league_id ?? null
-      season   = body.season   ?? null
-      teamType = body.team_type ?? 'club'
-    } catch { /* body vacío */ }
+      forcedLeagueId = body.league_id ?? null
+      forcedSeason   = body.season    ?? null
+      forcedTeamType = body.team_type ?? null
+    } catch { /* body vacío → auto-detect */ }
 
-    if (!leagueId || !season) {
-      return new Response(
-        JSON.stringify({ error: 'Requerido: { league_id, season, team_type }' }),
-        { status: 400 }
-      )
+    // Obtener todas las competencias vinculadas a torneos
+    const { data: tournaments, error: tErr } = await supabase
+      .from('tournaments')
+      .select('team_type, competition_id, competitions(id, external_id, season_year)')
+      .not('competition_id', 'is', null)
+
+    if (tErr) throw tErr
+    if (!tournaments?.length) {
+      return new Response(JSON.stringify({ message: 'No tournaments found' }), { status: 200 })
     }
 
-    // ─── 1. Resolver competition_id en Supabase ───────────────
-    const { data: comp, error: compErr } = await supabase
-      .from('competitions')
-      .select('id')
-      .eq('external_id', leagueId)
-      .eq('season_year', season)
-      .single()
-
-    if (compErr || !comp) {
-      return new Response(
-        JSON.stringify({ error: `Competencia no encontrada (league_id=${leagueId}, season=${season}). Ejecutá sync-competitions primero.` }),
-        { status: 404 }
-      )
-    }
-
-    const competitionId = comp.id
-
-    // ─── 2. Sync teams ────────────────────────────────────────
-    const teamsData = await apiFetch(`/teams?league=${leagueId}&season=${season}`)
-    const teamsRaw  = teamsData?.response ?? []
-
-    if (!teamsRaw.length) {
-      return new Response(JSON.stringify({ ok: true, teams: 0, players: 0 }), { status: 200 })
-    }
-
-    const teamRows = teamsRaw.map((t: any) => ({
-      external_id: t.team.id,
-      name:        t.team.name,
-      logo_url:    t.team.logo,
-      country:     t.team.country,
-      type:        teamType,
-    }))
-
-    const { error: teamsErr } = await supabase
-      .from('teams')
-      .upsert(teamRows, { onConflict: 'external_id' })
-    if (teamsErr) throw teamsErr
-
-    // Mapa external_id → UUID interno
-    const externalIds = teamRows.map((t: any) => t.external_id)
-    const { data: dbTeams } = await supabase
-      .from('teams')
-      .select('id, external_id')
-      .in('external_id', externalIds)
-
-    const teamMap = new Map((dbTeams ?? []).map(t => [t.external_id, t.id]))
-
-    // ─── 3. Sync players (squad por equipo) ───────────────────
-    let totalPlayers = 0
-
-    for (const t of teamsRaw) {
-      const squadData = await apiFetch(`/players/squads?team=${t.team.id}`)
-      const squad     = squadData?.response?.[0]?.players ?? []
-
-      const playerRows = squad.map((p: any) => ({
-        external_id:    p.id,
-        competition_id: competitionId,   // clave para diferenciar por competencia
-        name:           p.name,
-        photo_url:      p.photo,
-        nationality:    p.nationality ?? null,
-        flag_url:       flagUrl(p.nationality ?? null),
-        team_id:        teamMap.get(t.team.id) ?? null,
-        position:       p.position ?? null,
-        updated_at:     new Date().toISOString(),
+    // Deduplicate por competition_id
+    const seen = new Set<string>()
+    const targets = tournaments
+      .filter((t: any) => {
+        if (!t.competition_id || seen.has(t.competition_id)) return false
+        seen.add(t.competition_id)
+        return true
+      })
+      .map((t: any) => ({
+        competitionId: t.competitions?.id      as string,
+        externalId:    t.competitions?.external_id as number,
+        seasonYear:    t.competitions?.season_year as number,
+        teamType:      t.team_type ?? 'club',
       }))
+      .filter((c: any) =>
+        c.competitionId && c.externalId && c.seasonYear &&
+        // Si hay body con league_id específico, solo procesar esa
+        (!forcedLeagueId || (c.externalId === forcedLeagueId && c.seasonYear === forcedSeason))
+      )
 
-      if (playerRows.length) {
-        const { error } = await supabase
-          .from('players')
-          .upsert(playerRows, { onConflict: 'external_id,competition_id' })
-        if (error) console.error(`Players upsert error (team ${t.team.id}):`, error)
-        else totalPlayers += playerRows.length
-      }
+    if (!targets.length) {
+      return new Response(JSON.stringify({ error: 'No matching competitions found' }), { status: 404 })
+    }
 
-      // Pausa mínima entre requests
-      await new Promise(r => setTimeout(r, 200))
+    const results: any[] = []
+
+    for (const comp of targets) {
+      console.log(`Syncing squads for league ${comp.externalId} season ${comp.seasonYear}`)
+      const { teams, players } = await syncCompetition(
+        comp.externalId,
+        comp.seasonYear,
+        forcedTeamType ?? comp.teamType,
+        comp.competitionId,
+      )
+      results.push({ league_id: comp.externalId, season: comp.seasonYear, teams, players })
     }
 
     return new Response(
-      JSON.stringify({ ok: true, competition_id: competitionId, teams: teamRows.length, players: totalPlayers }),
+      JSON.stringify({ ok: true, results }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (err) {

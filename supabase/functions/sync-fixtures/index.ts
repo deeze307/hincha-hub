@@ -21,7 +21,7 @@ const ROUND_ORDER: Record<string, number> = {
 
 async function apiFetch(path: string) {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'x-apisports-key': API_KEY },
+    headers: { 'x-apisports-key': API_KEY, 'x-apisports-language': 'es' },
   })
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
   return res.json()
@@ -171,6 +171,16 @@ Deno.serve(async (_req) => {
       if (error) throw error
       totalUpserted += rows.length
     }
+
+    // Disparar score-predictions en background para actualizar puntos
+    const scoreUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/score-predictions`
+    fetch(scoreUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+    }).catch(e => console.error('score-predictions invoke failed:', e))
 
     return new Response(
       JSON.stringify({ ok: true, upserted: totalUpserted }),

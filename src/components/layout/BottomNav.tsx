@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Calendar, Target, BarChart3, User } from 'lucide-react'
+import { Home, Trophy, BarChart3, TrendingUp } from 'lucide-react'
 
 const NAV = [
-  { to: '/',         icon: Home,     label: 'Inicio' },
-  { to: '/partidos', icon: Calendar, label: 'Partidos' },
-  { to: '/predecir', icon: Target,   label: 'Predecir' },
-  { to: '/ranking',  icon: BarChart3,label: 'Ranking' },
-  { to: '/perfil',   icon: User,     label: 'Perfil' },
+  { to: '/',             icon: Home,       label: 'Inicio'       },
+  { to: '/torneos',      icon: Trophy,     label: 'Torneos'      },
+  { to: '/ranking',      icon: BarChart3,  label: 'Ranking'      },
+  { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas' },
 ]
 
 export default function BottomNav() {

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 736 624"
+     width="736"
+     height="624">
+
+  <!-- Arco blanco -->
+  <path d="M100 470
+           A270 270 0 0 1 470 60"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="28"
+        stroke-linecap="butt"/>
+
+  <!-- Figura blanca -->
+  <path d="M150 560
+           L255 170
+           L375 170
+           L325 335
+           L395 335
+           L355 430
+           L295 430
+           L225 560 Z"
+        fill="#FFFFFF"/>
+
+  <!-- Figura naranja -->
+  <path d="M450 55
+           L575 55
+           L470 560
+           L355 560
+           L420 320
+           L350 320
+           L390 235
+           L455 235 Z"
+        fill="#FF7403"/>
+
+  <!-- Arco naranja -->
+  <path d="M585 150
+           A285 285 0 0 1 210 595"
+        fill="none"
+        stroke="#FF7403"
+        stroke-width="28"
+        stroke-linecap="butt"/>
+
+</svg>
