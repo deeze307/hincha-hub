@@ -8,6 +8,7 @@ import {
 } from '../services/tournamentsService'
 import type { Competition } from '../services/competitionsService'
 import type { Tournament, ProdeConfig } from '../services/tournamentsService'
+import { useAuth } from '../contexts/AuthContext'
 
 interface FormState {
   name:                string
@@ -26,6 +27,7 @@ interface FormState {
   has_knockout:        boolean
   has_bonus:           boolean
   prediction_deadline: string  // datetime-local string
+  is_hidden:           boolean
 }
 
 const INITIAL: FormState = {
@@ -39,12 +41,15 @@ const INITIAL: FormState = {
   has_knockout: true,
   has_bonus: true,
   prediction_deadline: '',
+  is_hidden: false,
 }
 
 export default function TournamentFormPage() {
   const { id }   = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const isEdit   = Boolean(id)
+  const { profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'superadmin'
 
   const [form, setForm]             = useState<FormState>(INITIAL)
   const [competitions, setComps]    = useState<Competition[]>([])
@@ -94,6 +99,7 @@ export default function TournamentFormPage() {
       prediction_deadline: t.prediction_deadline
         ? new Date(t.prediction_deadline).toISOString().slice(0, 16)
         : '',
+      is_hidden: t.is_hidden ?? false,
     })
   }
 
@@ -158,6 +164,7 @@ export default function TournamentFormPage() {
           description: form.description,
           image_file:  form.image_file,
           image_url:   form.image_url,
+          is_hidden:   isSuperAdmin ? form.is_hidden : undefined,
         })
       } else {
         await createTournament({
@@ -497,6 +504,18 @@ export default function TournamentFormPage() {
               </div>
 
             </div>
+          </div>
+        )}
+
+        {/* ── Visibilidad (solo superadmin en edición) ── */}
+        {isEdit && isSuperAdmin && (
+          <div className="border border-border rounded-xl p-4">
+            <ToggleRow
+              label="Ocultar torneo"
+              description="El torneo no será visible para los usuarios generales"
+              value={form.is_hidden}
+              onChange={v => set({ is_hidden: v })}
+            />
           </div>
         )}
 

@@ -32,6 +32,7 @@ export interface Tournament {
   prediction_deadline: string | null
   created_at:          string
   updated_at:          string
+  is_hidden:           boolean
   // joins
   competition?:    { name: string; logo_url: string | null; country: string } | null
   participant_count?: number
@@ -56,6 +57,7 @@ export interface UpdateTournamentData {
   description: string
   image_file:  File | null
   image_url:   string | null
+  is_hidden?:  boolean
 }
 
 export async function fetchTournaments(): Promise<Tournament[]> {
@@ -67,7 +69,7 @@ export async function fetchTournaments(): Promise<Tournament[]> {
       id, name, description, image_url, access_type,
       max_participants, status, created_by, competition_id,
       team_type, prode_config, prediction_deadline,
-      created_at, updated_at,
+      created_at, updated_at, is_hidden,
       competition:competitions(name, logo_url, country),
       participant_count:tournament_registrations(count)
     `)
@@ -77,10 +79,21 @@ export async function fetchTournaments(): Promise<Tournament[]> {
 
   const tournaments = (data ?? []) as any[]
 
-  if (!user) return tournaments
+  let isSuperAdmin = false
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles').select('role').eq('id', user.id).single()
+    isSuperAdmin = profile?.role === 'superadmin'
+  }
+
+  const visible = isSuperAdmin ? tournaments : tournaments.filter((t: any) => !t.is_hidden)
+
+  if (!user) return visible
+
+  const ids = visible.map(t => t.id)
+  if (!ids.length) return visible
 
   // Traer inscripciones y solicitudes del usuario actual
-  const ids = tournaments.map(t => t.id)
   const [{ data: regs }, { data: reqs }] = await Promise.all([
     supabase.from('tournament_registrations')
       .select('tournament_id')
@@ -96,7 +109,7 @@ export async function fetchTournaments(): Promise<Tournament[]> {
   const regSet     = new Set((regs ?? []).map((r: any) => r.tournament_id))
   const pendingSet = new Set((reqs ?? []).map((r: any) => r.tournament_id))
 
-  return tournaments.map(t => ({
+  return visible.map(t => ({
     ...t,
     participant_count:    t.participant_count?.[0]?.count ?? 0,
     is_registered:        regSet.has(t.id),
@@ -160,14 +173,17 @@ export async function updateTournament(id: string, data: UpdateTournamentData): 
     image_url = await uploadTournamentImage(data.image_file, id)
   }
 
+  const patch: Record<string, any> = {
+    name:        data.name.trim(),
+    description: data.description.trim() || null,
+    image_url,
+    updated_at:  new Date().toISOString(),
+  }
+  if (data.is_hidden !== undefined) patch.is_hidden = data.is_hidden
+
   const { error } = await supabase
     .from('tournaments')
-    .update({
-      name:        data.name.trim(),
-      description: data.description.trim() || null,
-      image_url,
-      updated_at:  new Date().toISOString(),
-    })
+    .update(patch)
     .eq('id', id)
 
   if (error) throw new Error(error.message)

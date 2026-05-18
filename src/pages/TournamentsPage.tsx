@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, Lock, Globe, ChevronRight, Loader2 } from 'lucide-react'
+import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff } from 'lucide-react'
 import { fetchTournaments, joinTournament, requestJoinTournament } from '../services/tournamentsService'
 import type { Tournament } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
@@ -143,12 +143,17 @@ function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, o
           ? <img src={t.image_url} alt={t.name} className="w-full h-full object-cover" />
           : <TournamentInitials name={t.name} />
         }
-        {/* Access badge */}
-        <div className="absolute top-2 right-2">
+        {/* Access + hidden badges */}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
           {t.access_type === 'open'
             ? <span className="flex items-center gap-1 bg-green-500/20 border border-green-500/30 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Globe size={9}/> Abierto</span>
             : <span className="flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Lock size={9}/> Con solicitud</span>
           }
+          {isSuperAdmin && t.is_hidden && (
+            <span className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+              <EyeOff size={9}/> Oculto
+            </span>
+          )}
         </div>
       </div>
 
