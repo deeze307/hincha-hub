@@ -16,16 +16,29 @@ export interface JoinRequest {
 export async function fetchPendingRequests(): Promise<JoinRequest[]> {
   const { data, error } = await supabase
     .from('join_requests')
-    .select(`
-      id, tournament_id, user_id, status, created_at, resolved_at,
-      tournament:tournaments(name),
-      profile:profiles(full_name, username)
-    `)
+    .select('id, tournament_id, user_id, status, created_at, resolved_at')
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
-  return (data ?? []) as JoinRequest[]
+  if (!data?.length) return []
+
+  const tournamentIds = [...new Set(data.map((r: any) => r.tournament_id))]
+  const userIds       = [...new Set(data.map((r: any) => r.user_id))]
+
+  const [{ data: tournaments }, { data: profiles }] = await Promise.all([
+    supabase.from('tournaments').select('id, name').in('id', tournamentIds),
+    supabase.from('profiles').select('id, full_name, username').in('id', userIds),
+  ])
+
+  const tMap = new Map((tournaments ?? []).map((t: any) => [t.id, t]))
+  const pMap = new Map((profiles   ?? []).map((p: any) => [p.id, p]))
+
+  return data.map((r: any) => ({
+    ...r,
+    tournament: tMap.get(r.tournament_id) ?? null,
+    profile:    pMap.get(r.user_id)       ?? null,
+  })) as JoinRequest[]
 }
 
 export async function fetchPendingRequestsCount(): Promise<number> {
@@ -42,24 +55,15 @@ export async function acceptRequest(request: JoinRequest): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
 
-  const now = new Date().toISOString()
+  // RPC con SECURITY DEFINER — bypasea RLS para poder inscribir al solicitante
+  const { error } = await supabase.rpc('accept_join_request', {
+    p_request_id:  request.id,
+    p_resolved_by: user.id,
+  })
 
-  // 1. Marcar solicitud como aceptada
-  const { error: reqErr } = await supabase
-    .from('join_requests')
-    .update({ status: 'accepted', resolved_at: now, resolved_by: user.id })
-    .eq('id', request.id)
+  if (error) throw new Error(error.message)
 
-  if (reqErr) throw new Error(reqErr.message)
-
-  // 2. Inscribir al usuario en el torneo
-  const { error: regErr } = await supabase
-    .from('tournament_registrations')
-    .insert({ tournament_id: request.tournament_id, user_id: request.user_id })
-
-  if (regErr && !regErr.message.includes('duplicate')) throw new Error(regErr.message)
-
-  // 3. Enviar notificación al solicitante
+  // Notificar al solicitante
   const tournamentName = request.tournament?.name ?? 'el torneo'
   await supabase.from('notifications').insert({
     user_id: request.user_id,
