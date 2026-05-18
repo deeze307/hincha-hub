@@ -44,7 +44,7 @@ export default function TournamentRankingPage() {
       .select('name')
       .eq('id', id)
       .single()
-      .then(({ data }) => setTournamentName(data?.name ?? 'Torneo'))
+      .then(({ data }: { data: any }) => setTournamentName(data?.name ?? 'Torneo'))
 
     fetchTournamentRanking(id)
       .then(setEntries)
