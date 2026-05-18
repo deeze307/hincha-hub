@@ -706,7 +706,7 @@ export default function TournamentProdePage() {
 
         const [ms, preds] = await Promise.all([
           fetchMatchesByCompetition(compId, seasonYear),
-          fetchUserPredictions(id),
+          fetchUserPredictions(id!),
         ])
 
         setMatches(ms)
