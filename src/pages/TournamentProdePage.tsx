@@ -46,7 +46,7 @@ function calcGroupStandings(
 ): TeamStanding[] {
   const standings = new Map<string, TeamStanding>()
 
-  function ensure(match: CompetitionMatch, team: CompetitionMatch['home_team']) {
+  function ensure(_match: CompetitionMatch, team: CompetitionMatch['home_team']) {
     if (!team) return
     if (!standings.has(team.id)) {
       standings.set(team.id, {
@@ -685,7 +685,7 @@ export default function TournamentProdePage() {
   useEffect(() => {
     if (tab !== 'ranking' || !id) return
     setRankingLoading(true)
-    fetchTournamentRanking(id)
+    fetchTournamentRanking(id!)
       .then(setRankingEntries)
       .finally(() => setRankingLoading(false))
   }, [tab, id])
