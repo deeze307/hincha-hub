@@ -55,41 +55,22 @@ export async function acceptRequest(request: JoinRequest): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
 
-  // RPC con SECURITY DEFINER — bypasea RLS para poder inscribir al solicitante
   const { error } = await supabase.rpc('accept_join_request', {
     p_request_id:  request.id,
     p_resolved_by: user.id,
   })
 
   if (error) throw new Error(error.message)
-
-  // Notificar al solicitante
-  const tournamentName = request.tournament?.name ?? 'el torneo'
-  await supabase.from('notifications').insert({
-    user_id: request.user_id,
-    type:    'league',
-    text:    `Tu solicitud para unirte a "${tournamentName}" fue aceptada.`,
-  })
 }
 
 export async function rejectRequest(request: JoinRequest): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
 
-  const now = new Date().toISOString()
-
-  const { error } = await supabase
-    .from('join_requests')
-    .update({ status: 'rejected', resolved_at: now, resolved_by: user.id })
-    .eq('id', request.id)
+  const { error } = await supabase.rpc('reject_join_request', {
+    p_request_id:  request.id,
+    p_resolved_by: user.id,
+  })
 
   if (error) throw new Error(error.message)
-
-  // Notificar rechazo
-  const tournamentName = request.tournament?.name ?? 'el torneo'
-  await supabase.from('notifications').insert({
-    user_id: request.user_id,
-    type:    'system',
-    text:    `Tu solicitud para unirte a "${tournamentName}" fue rechazada.`,
-  })
 }
