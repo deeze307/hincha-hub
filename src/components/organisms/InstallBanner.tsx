@@ -21,8 +21,8 @@ export default function InstallBanner() {
 
   return (
     <div className="fixed bottom-16 inset-x-0 z-40 px-3 pb-1 lg:hidden">
-      <div className="bg-surface border border-border rounded-2xl px-3.5 py-3 flex items-center gap-3 shadow-elevated">
-        <img src={isotipo} alt="" className="w-10 h-10 rounded-xl shrink-0 object-contain bg-elevated p-1" />
+      <div className="bg-brand/15 border border-brand/50 rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ boxShadow: '0 0 20px rgba(255,85,0,0.15)' }}>
+        <img src={isotipo} alt="" className="w-10 h-10 rounded-xl shrink-0 object-contain bg-brand/20 p-1" />
 
         <div className="flex-1 min-w-0">
           <p className="text-text text-sm font-semibold leading-tight">Instalá HinchaHub</p>
@@ -51,7 +51,7 @@ export default function InstallBanner() {
 
         <button
           onClick={dismiss}
-          className="w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-elevated transition-colors shrink-0"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-muted hover:text-text hover:bg-brand/20 transition-colors shrink-0"
         >
           <X size={15} />
         </button>
