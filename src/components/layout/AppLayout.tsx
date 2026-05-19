@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
+import InstallBanner from '../organisms/InstallBanner'
 
 export default function AppLayout() {
   const { user, loading } = useAuth()
@@ -28,6 +29,7 @@ export default function AppLayout() {
         </main>
       </div>
 
+      <InstallBanner />
       <BottomNav />
     </div>
   )
