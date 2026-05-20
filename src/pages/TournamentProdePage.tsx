@@ -978,7 +978,7 @@ export default function TournamentProdePage() {
                     <MatchRow
                       key={m.id}
                       match={m}
-                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null }}
+                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
                       onChange={(h, a) => setPred(m.id, h, a)}
                     />
                   ))}
@@ -1195,7 +1195,7 @@ function KnockoutTab({
                   <MatchRow
                     key={m.id}
                     match={m}
-                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null }}
+                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
                     onChange={(h, a) => onPred(m.id, h, a)}
                   />
                 ))
