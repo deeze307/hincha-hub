@@ -4,7 +4,7 @@ import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star 
 import { fetchTournaments } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
 import {
-  fetchUserPredictions, saveMatchPredictions, calcPoints,
+  fetchUserPredictions, saveMatchPredictions,
   fetchUserBonusPredictions, saveBonusPredictions,
 } from '../services/predictionsService'
 import { searchTeams, searchPlayers } from '../services/teamsService'
@@ -19,11 +19,30 @@ import type { RankingEntry } from '../services/rankingService'
 // ─── Tipos locales ────────────────────────────────────────────────
 
 interface ScoreInput {
-  home: string
-  away: string
+  home:         string
+  away:         string
+  pts:          number | null  // points_earned from DB after scoring
+  is_modified:  boolean        // true = permanently locked (used their one edit)
+  exists_in_db: boolean        // false = never saved yet
 }
 
 type PredMap = Map<string, ScoreInput>  // match_id → scores
+
+// ─── Helpers de bloqueo por partido ──────────────────────────────
+
+const LOCKOUT_HOURS = 1   // bloqueo 1h antes del partido
+const LATE_HOURS    = 24  // predicciones dentro de 24h → puntos reducidos
+
+function isMatchLocked(match: CompetitionMatch): boolean {
+  if (match.home_score != null || match.away_score != null) return true
+  if (!match.match_date) return false
+  return Date.now() >= new Date(match.match_date).getTime() - LOCKOUT_HOURS * 3_600_000
+}
+
+function isMatchLate(match: CompetitionMatch): boolean {
+  if (!match.match_date || isMatchLocked(match)) return false
+  return Date.now() >= new Date(match.match_date).getTime() - LATE_HOURS * 3_600_000
+}
 
 // ─── Cálculo de standings (puntos, GD, GF) ───────────────────────
 
@@ -100,25 +119,6 @@ function calcGroupStandings(
   })
 }
 
-// ─── Determinar si el prode está bloqueado ───────────────────────
-
-function isLocked(tournament: Tournament, matches: CompetitionMatch[]): boolean {
-  // Usar prediction_deadline si está configurada
-  if (tournament.prediction_deadline) {
-    return new Date() >= new Date(tournament.prediction_deadline)
-  }
-  // Sino, primer partido - 2 horas
-  const groupMatches = matches.filter(m => m.round_order === 1)
-  if (!groupMatches.length) return false
-  const dates = groupMatches
-    .map(m => m.match_date)
-    .filter(Boolean)
-    .map(d => new Date(d!).getTime())
-  if (!dates.length) return false
-  const firstMatch = Math.min(...dates)
-  return Date.now() >= firstMatch - 2 * 60 * 60 * 1000
-}
-
 // ─── Componentes ─────────────────────────────────────────────────
 
 function TeamLogo({ url, name, size = 20 }: { url: string | null; name: string; size?: number }) {
@@ -150,19 +150,18 @@ function ScoreBox({
 }
 
 function MatchRow({
-  match, pred, locked, onChange,
+  match, pred, onChange,
 }: {
   match:    CompetitionMatch
   pred:     ScoreInput
-  locked:   boolean
   onChange: (home: string, away: string) => void
 }) {
-  // Puntos ya ganados si el partido terminó
-  const pts = calcPoints(
-    pred.home !== '' ? parseInt(pred.home) : null,
-    pred.away !== '' ? parseInt(pred.away) : null,
-    match.home_score, match.away_score,
-  )
+  const locked = isMatchLocked(match) || pred.is_modified
+  const isLate = isMatchLate(match)
+  const isPast = match.home_score != null ||
+    (match.match_date != null && new Date(match.match_date) < new Date())
+
+  const displayPts = (match.home_score != null && match.away_score != null) ? pred.pts : null
 
   const dateStr = match.match_date
     ? new Date(match.match_date).toLocaleString('es-AR', {
@@ -170,11 +169,10 @@ function MatchRow({
       })
     : '—'
 
-  const isPast = match.home_score != null ||
-    (match.match_date != null && new Date(match.match_date) < new Date())
-
   return (
-    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${isPast ? 'bg-black/20' : ''}`}>
+    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${
+      isPast ? 'bg-black/20' : isLate ? 'bg-yellow-500/5' : ''
+    }`}>
       {/* Equipo local */}
       <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
         <span className={`text-sm font-medium truncate text-right hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
@@ -183,11 +181,16 @@ function MatchRow({
         <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
       </div>
 
-      {/* Inputs */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <ScoreBox value={pred.home} onChange={v => onChange(v, pred.away)} locked={locked} />
-        <span className="text-muted-dark text-xs font-semibold">-</span>
-        <ScoreBox value={pred.away} onChange={v => onChange(pred.home, v)} locked={locked} />
+      {/* Inputs + indicador ½ pts */}
+      <div className="flex flex-col items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <ScoreBox value={pred.home} onChange={v => onChange(v, pred.away)} locked={locked} />
+          <span className="text-muted-dark text-xs font-semibold">-</span>
+          <ScoreBox value={pred.away} onChange={v => onChange(pred.home, v)} locked={locked} />
+        </div>
+        {isLate && (
+          <span className="text-yellow-400 text-[10px] font-semibold leading-none">½ pts</span>
+        )}
       </div>
 
       {/* Equipo visitante */}
@@ -205,11 +208,14 @@ function MatchRow({
             <span className="text-muted-dark text-xs font-mono">
               {match.home_score} - {match.away_score}
             </span>
-            {pts != null && (
+            {displayPts != null && (
               <span className={`text-[11px] font-bold ${
-                pts === 3 ? 'text-green-400' : pts === 1 ? 'text-yellow-400' : 'text-red-400'
+                displayPts >= 8 ? 'text-green-400' :
+                displayPts >= 3 ? 'text-yellow-400' :
+                displayPts >  0 ? 'text-orange-400' :
+                'text-red-400'
               }`}>
-                {pts === 3 ? '+3' : pts === 1 ? '+1' : '+0'}
+                +{displayPts}
               </span>
             )}
           </div>
@@ -505,19 +511,25 @@ const RANK_META = [
 ]
 
 function BonusTab({ tournament, locked }: { tournament: Tournament; locked: boolean }) {
-  const [champions, setChampions] = useState<[SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]>([null, null, null])
-  const [scorers,   setScorers]   = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
-  const [saving,    setSaving]    = useState(false)
-  const [saved,     setSaved]     = useState(false)
-  const [loading,   setLoading]   = useState(true)
+  const [champions,        setChampions]        = useState<[SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]>([null, null, null])
+  const [scorers,          setScorers]          = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
+  const [savedKeys,        setSavedKeys]        = useState<Set<string>>(new Set())
+  const [bonusIsModified,  setBonusIsModified]  = useState(false)
+  const [saving,           setSaving]           = useState(false)
+  const [saved,            setSaved]            = useState(false)
+  const [loading,          setLoading]          = useState(true)
 
   useEffect(() => {
     async function load() {
       try {
         const bonuses = await fetchUserBonusPredictions(tournament.id)
-        const newChamps: [SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]   = [null, null, null]
-        const newScores: [SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null] = [null, null, null]
+        const newChamps: [SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]         = [null, null, null]
+        const newScores: [SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]   = [null, null, null]
+        const keys = new Set<string>()
+        let anyModified = false
         for (const b of bonuses) {
+          keys.add(`${b.type}-${b.rank}`)
+          if (b.is_modified) anyModified = true
           if (b.type === 'champion' && b.rank >= 1 && b.rank <= 3 && b.team_name) {
             newChamps[b.rank - 1] = { id: b.team_id!, name: b.team_name, logo_url: null }
           }
@@ -527,6 +539,8 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
         }
         setChampions(newChamps)
         setScorers(newScores)
+        setSavedKeys(keys)
+        setBonusIsModified(anyModified)
       } finally {
         setLoading(false)
       }
@@ -534,18 +548,52 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
     load()
   }, [tournament.id])
 
+  // Effective lock: time-locked by parent OR already used their one modification
+  const effectiveLocked = locked || bonusIsModified
+
   async function handleSave() {
-    if (locked) return
+    if (effectiveLocked) return
     setSaving(true)
     try {
       const bonuses: BonusPrediction[] = []
       champions.forEach((c, i) => {
-        if (c) bonuses.push({ tournament_id: tournament.id, type: 'champion', rank: (i + 1) as 1|2|3, team_id: c.id, team_name: c.name })
+        if (!c) return
+        const key = `champion-${i + 1}`
+        bonuses.push({
+          tournament_id: tournament.id,
+          type:          'champion',
+          rank:          (i + 1) as 1|2|3,
+          team_id:       c.id,
+          team_name:     c.name,
+          is_modified:   savedKeys.has(key),  // true = this is a modification of an existing row
+        })
       })
       scorers.forEach((s, i) => {
-        if (s) bonuses.push({ tournament_id: tournament.id, type: 'top_scorer', rank: (i + 1) as 1|2|3, player_id: s.id, player_name: s.name })
+        if (!s) return
+        const key = `top_scorer-${i + 1}`
+        bonuses.push({
+          tournament_id: tournament.id,
+          type:          'top_scorer',
+          rank:          (i + 1) as 1|2|3,
+          player_id:     s.id,
+          player_name:   s.name,
+          is_modified:   savedKeys.has(key),
+        })
       })
+      if (bonuses.length === 0) return
       await saveBonusPredictions(tournament.id, bonuses)
+
+      // Update local state to reflect what was saved
+      const newSavedKeys = new Set(savedKeys)
+      let nowModified = false
+      bonuses.forEach(b => {
+        const key = `${b.type}-${b.rank}`
+        if (b.is_modified) nowModified = true
+        newSavedKeys.add(key)
+      })
+      setSavedKeys(newSavedKeys)
+      if (nowModified) setBonusIsModified(true)
+
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } finally {
@@ -572,6 +620,14 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
         </p>
       </div>
 
+      {/* Estado modificado */}
+      {bonusIsModified && (
+        <div className="flex items-center gap-2 text-muted text-sm bg-elevated border border-border rounded-xl px-4 py-3">
+          <Lock size={14} className="shrink-0" />
+          <span>Ya usaste tu modificación — los bonus no se pueden cambiar más.</span>
+        </div>
+      )}
+
       {/* Campeón */}
       <div className="card">
         <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
@@ -597,7 +653,7 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
                     next[rank - 1] = t
                     return next
                   })}
-                  locked={locked}
+                  locked={effectiveLocked}
                   teamType={tournament.team_type}
                   placeholder="Buscar equipo..."
                 />
@@ -633,7 +689,7 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
                       next[rank - 1] = p
                       return next
                     })}
-                    locked={locked}
+                    locked={effectiveLocked}
                     competitionId={tournament.competition_id!}
                     placeholder="Buscar jugador..."
                   />
@@ -645,7 +701,7 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
       )}
 
       {/* Guardar */}
-      {!locked && (
+      {!effectiveLocked && (
         <div className="flex justify-end">
           <button
             onClick={handleSave}
@@ -715,13 +771,16 @@ export default function TournamentProdePage() {
         const map: PredMap = new Map()
         for (const p of preds) {
           map.set(p.match_id, {
-            home: p.home_prediction != null ? String(p.home_prediction) : '',
-            away: p.away_prediction != null ? String(p.away_prediction) : '',
+            home:         p.home_prediction != null ? String(p.home_prediction) : '',
+            away:         p.away_prediction != null ? String(p.away_prediction) : '',
+            pts:          p.points_earned ?? null,
+            is_modified:  p.is_modified ?? false,
+            exists_in_db: true,
           })
         }
         // Inicializar celdas vacías para partidos sin predicción
         for (const m of ms) {
-          if (!map.has(m.id)) map.set(m.id, { home: '', away: '' })
+          if (!map.has(m.id)) map.set(m.id, { home: '', away: '', pts: null, is_modified: false, exists_in_db: false })
         }
         setPredMap(map)
       } finally {
@@ -731,13 +790,20 @@ export default function TournamentProdePage() {
     load()
   }, [id])
 
-  const locked = useMemo(() =>
-    tournament ? isLocked(tournament, matches) : false,
-    [tournament, matches],
+  const anyUnlocked = useMemo(
+    () => matches.some(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified)),
+    [matches, predMap],
   )
 
-  const groupMatchesMap  = useMemo(() => groupMatchesByGroup(matches),  [matches])
-  const knockoutRoundsMap = useMemo(() => groupMatchesByRound(matches), [matches])
+  const groupMatchesMap   = useMemo(() => groupMatchesByGroup(matches),  [matches])
+  const knockoutRoundsMap = useMemo(() => groupMatchesByRound(matches),  [matches])
+
+  const bonusLocked = useMemo(() => {
+    const refMatches = knockoutRoundsMap.get('3rd Place Final') ?? knockoutRoundsMap.get('Final') ?? []
+    const refMatch   = refMatches[0]
+    if (!refMatch?.match_date) return false
+    return Date.now() >= new Date(refMatch.match_date).getTime() - LOCKOUT_HOURS * 3_600_000
+  }, [knockoutRoundsMap])
 
   const config = tournament?.prode_config
   const directQ  = config?.direct_qualifiers ?? 2
@@ -745,25 +811,56 @@ export default function TournamentProdePage() {
 
   function setPred(matchId: string, home: string, away: string) {
     setPredMap(prev => {
-      const next = new Map(prev)
-      next.set(matchId, { home, away })
+      const next     = new Map(prev)
+      const existing = prev.get(matchId)
+      next.set(matchId, {
+        home,
+        away,
+        pts:          existing?.pts          ?? null,
+        is_modified:  existing?.is_modified  ?? false,
+        exists_in_db: existing?.exists_in_db ?? false,
+      })
       return next
     })
     setSaved(false)
   }
 
   async function handleSave() {
-    if (!id || locked) return
+    if (!id) return
     setSaving(true)
     try {
-      const all = [...predMap.entries()]
-        .filter(([, v]) => v.home !== '' || v.away !== '')
+      const toSave = [...predMap.entries()]
+        .filter(([match_id, v]) => {
+          if (v.home === '' && v.away === '') return false
+          if (v.is_modified) return false  // already used their one edit — skip
+          const match = matches.find(m => m.id === match_id)
+          return match && !isMatchLocked(match)
+        })
         .map(([match_id, v]) => ({
           match_id,
-          home: v.home !== '' ? parseInt(v.home) : null,
-          away: v.away !== '' ? parseInt(v.away) : null,
+          home:   v.home !== '' ? parseInt(v.home) : null,
+          away:   v.away !== '' ? parseInt(v.away) : null,
+          is_new: !v.exists_in_db,
         }))
-      await saveMatchPredictions(id, all)
+
+      if (toSave.length) {
+        await saveMatchPredictions(id, toSave)
+        // Update predMap: new entries get exists_in_db=true; updated entries get is_modified=true
+        setPredMap(prev => {
+          const next = new Map(prev)
+          for (const p of toSave) {
+            const existing = prev.get(p.match_id)
+            if (!existing) continue
+            next.set(p.match_id, {
+              ...existing,
+              exists_in_db: true,
+              is_modified:  !p.is_new,  // only mark modified if it was an update
+            })
+          }
+          return next
+        })
+      }
+
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } finally {
@@ -788,9 +885,10 @@ export default function TournamentProdePage() {
     { key: 'ranking',  label: 'Ranking' },
   ] as { key: typeof tab; label: string }[]
 
-  // Conteo de predicciones completas
-  const groupMatches  = matches.filter(m => m.round_order === 1)
-  const filledCount   = groupMatches.filter(m => {
+  // Conteo de predicciones completas en partidos todavía abiertos
+  const groupMatches        = matches.filter(m => m.round_order === 1)
+  const unlockedGroupMatches = groupMatches.filter(m => !isMatchLocked(m))
+  const filledCount         = unlockedGroupMatches.filter(m => {
     const p = predMap.get(m.id)
     return p && p.home !== '' && p.away !== ''
   }).length
@@ -818,7 +916,7 @@ export default function TournamentProdePage() {
 
         {/* Fila 2: estado / acciones */}
         <div className="flex items-center justify-between gap-3 pl-11">
-          {locked ? (
+          {!anyUnlocked ? (
             <div className="flex items-center gap-2 text-muted text-sm">
               <Lock size={14} />
               <span>Predicciones cerradas</span>
@@ -826,7 +924,7 @@ export default function TournamentProdePage() {
           ) : (
             <>
               <span className="text-muted text-xs">
-                {filledCount}/{groupMatches.length} partidos completados
+                {filledCount}/{unlockedGroupMatches.length} partidos por jugar
               </span>
               <button
                 onClick={handleSave}
@@ -847,10 +945,8 @@ export default function TournamentProdePage() {
         </div>
       </div>
 
-      {/* Deadline banner */}
-      {!locked && (
-        <DeadlineBanner tournament={tournament} matches={matches} />
-      )}
+      {/* Info de puntuación */}
+      <ScoringInfoBanner />
 
       {/* Tabs */}
       <div className="flex gap-1 bg-elevated p-1 rounded-md w-fit">
@@ -882,8 +978,7 @@ export default function TournamentProdePage() {
                     <MatchRow
                       key={m.id}
                       match={m}
-                      pred={predMap.get(m.id) ?? { home: '', away: '' }}
-                      locked={locked}
+                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null }}
                       onChange={(h, a) => setPred(m.id, h, a)}
                     />
                   ))}
@@ -915,14 +1010,13 @@ export default function TournamentProdePage() {
         <KnockoutTab
           roundsMap={knockoutRoundsMap}
           predMap={predMap}
-          locked={locked}
           onPred={setPred}
         />
       )}
 
       {/* ── Bonus ── */}
       {tab === 'bonus' && (
-        <BonusTab tournament={tournament} locked={locked} />
+        <BonusTab tournament={tournament} locked={bonusLocked} />
       )}
 
       {/* ── Ranking ── */}
@@ -1026,47 +1120,33 @@ function ProdeRankingTab({
   )
 }
 
-// ─── Banner de deadline ───────────────────────────────────────────
+// ─── Banner de sistema de puntos ─────────────────────────────────
 
-function DeadlineBanner({ tournament, matches }: { tournament: Tournament; matches: CompetitionMatch[] }) {
-  let deadline: Date | null = null
-
-  if (tournament.prediction_deadline) {
-    deadline = new Date(tournament.prediction_deadline)
-  } else {
-    const groupDates = matches
-      .filter(m => m.round_order === 1 && m.match_date)
-      .map(m => new Date(m.match_date!).getTime())
-    if (groupDates.length) {
-      deadline = new Date(Math.min(...groupDates) - 2 * 60 * 60 * 1000)
-    }
-  }
-
-  if (!deadline) return null
-
-  const diff = deadline.getTime() - Date.now()
-  const days  = Math.floor(diff / 86400000)
-  const hours = Math.floor((diff % 86400000) / 3600000)
-  const mins  = Math.floor((diff % 3600000) / 60000)
-
-  const label = days > 0
-    ? `${days}d ${hours}h`
-    : hours > 0 ? `${hours}h ${mins}min`
-    : `${mins} minutos`
-
-  const deadlineStr = deadline.toLocaleString('es-AR', {
-    weekday: 'long', day: '2-digit', month: 'long',
-    hour: '2-digit', minute: '2-digit',
-  })
-
+function ScoringInfoBanner() {
+  const rows: [string, number, number][] = [
+    ['Resultado exacto',          12, 6],
+    ['Ganador + goles de 1 equipo', 8, 4],
+    ['Solo ganador / empate',       6, 3],
+    ['Goles de un equipo',          2, 1],
+  ]
   return (
-    <div className="bg-brand/10 border border-brand/25 rounded-xl px-4 py-3 flex items-center gap-3">
-      <Lock size={14} className="text-brand shrink-0" />
-      <p className="text-sm text-text">
-        Tiempo para predecir:{' '}
-        <span className="font-semibold text-brand">{label}</span>
-        <span className="text-muted ml-2 text-xs">· Cierra el {deadlineStr}</span>
-      </p>
+    <div className="bg-elevated border border-border rounded-xl px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Puntos por predicción</p>
+        <div className="flex items-center gap-3 text-[10px]">
+          <span className="text-green-400 font-semibold">● ≥ 24h antes</span>
+          <span className="text-yellow-400 font-semibold">● &lt; 24h antes</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1">
+        {rows.map(([label, early, late]) => (
+          <div key={label} className="contents">
+            <span className="text-muted text-xs">{label}</span>
+            <span className="text-green-400 text-xs font-bold text-right">+{early}</span>
+            <span className="text-yellow-400 text-xs font-bold text-right">+{late}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1074,11 +1154,10 @@ function DeadlineBanner({ tournament, matches }: { tournament: Tournament; match
 // ─── Tab Eliminatoria ─────────────────────────────────────────────
 
 function KnockoutTab({
-  roundsMap, predMap, locked, onPred,
+  roundsMap, predMap, onPred,
 }: {
   roundsMap: Map<string, CompetitionMatch[]>
   predMap:   PredMap
-  locked:    boolean
   onPred:    (matchId: string, home: string, away: string) => void
 }) {
   if (roundsMap.size === 0) {
@@ -1116,8 +1195,7 @@ function KnockoutTab({
                   <MatchRow
                     key={m.id}
                     match={m}
-                    pred={predMap.get(m.id) ?? { home: '', away: '' }}
-                    locked={locked}
+                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null }}
                     onChange={(h, a) => onPred(m.id, h, a)}
                   />
                 ))

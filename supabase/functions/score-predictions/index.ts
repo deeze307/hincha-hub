@@ -6,20 +6,74 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 )
 
+interface ScoringCfg {
+  early_cutoff_hours: number
+  early_exact:        number
+  early_winner_goals: number
+  early_winner:       number
+  early_goals:        number
+  late_exact:         number
+  late_winner_goals:  number
+  late_winner:        number
+  late_goals:         number
+}
+
+const DEFAULT_CFG: ScoringCfg = {
+  early_cutoff_hours: 24,
+  early_exact:        12,
+  early_winner_goals: 8,
+  early_winner:       6,
+  early_goals:        2,
+  late_exact:         6,
+  late_winner_goals:  4,
+  late_winner:        3,
+  late_goals:         1,
+}
+
 function calcPoints(
   homePred: number, awayPred: number,
   homeReal: number, awayReal: number,
+  isEarly:  boolean,
+  cfg:      ScoringCfg,
 ): number {
-  if (homePred === homeReal && awayPred === awayReal) return 3
-  return Math.sign(homePred - awayPred) === Math.sign(homeReal - awayReal) ? 1 : 0
+  const exactHome  = homePred === homeReal
+  const exactAway  = awayPred === awayReal
+
+  if (exactHome && exactAway)
+    return isEarly ? cfg.early_exact : cfg.late_exact
+
+  const predWinner  = Math.sign(homePred - awayPred)
+  const realWinner  = Math.sign(homeReal - awayReal)
+  const winnerMatch = predWinner === realWinner
+
+  if (winnerMatch && (exactHome || exactAway))
+    return isEarly ? cfg.early_winner_goals : cfg.late_winner_goals
+
+  if (winnerMatch)
+    return isEarly ? cfg.early_winner : cfg.late_winner
+
+  if (exactHome || exactAway)
+    return isEarly ? cfg.early_goals : cfg.late_goals
+
+  return 0
 }
 
 Deno.serve(async () => {
   try {
-    // 1. Todos los partidos finalizados con resultado
+    // 1. Cargar configuración de puntuación
+    const { data: cfgRow } = await supabase
+      .from('scoring_config')
+      .select('*')
+      .limit(1)
+      .single()
+
+    const cfg: ScoringCfg = cfgRow ?? DEFAULT_CFG
+    const earlyCutoffMs   = (cfg.early_cutoff_hours ?? 24) * 3_600_000
+
+    // 2. Partidos finalizados con resultado y fecha
     const { data: matches, error: mErr } = await supabase
       .from('competition_matches')
-      .select('id, home_score, away_score')
+      .select('id, home_score, away_score, match_date')
       .in('status', ['FT', 'AET', 'PEN'])
       .not('home_score', 'is', null)
       .not('away_score', 'is', null)
@@ -32,12 +86,12 @@ Deno.serve(async () => {
     }
 
     const matchIds  = matches.map((m: any) => m.id)
-    const scoreMap  = new Map(matches.map((m: any) => [m.id, { home: m.home_score as number, away: m.away_score as number }]))
+    const matchMap  = new Map(matches.map((m: any) => [m.id, m]))
 
-    // 2. Predicciones completadas para esos partidos
+    // 3. Predicciones completadas, incluyendo predicted_at
     const { data: preds, error: pErr } = await supabase
       .from('match_predictions')
-      .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction')
+      .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at')
       .in('match_id', matchIds)
       .not('home_prediction', 'is', null)
       .not('away_prediction', 'is', null)
@@ -49,9 +103,17 @@ Deno.serve(async () => {
       })
     }
 
-    // 3. Calcular puntos y preparar upsert
+    // 4. Calcular puntos con lógica early/late
     const rows = preds.map((p: any) => {
-      const s = scoreMap.get(p.match_id)!
+      const match      = matchMap.get(p.match_id)!
+      const matchDate  = match.match_date ? new Date(match.match_date).getTime() : null
+      const predictedAt = p.predicted_at  ? new Date(p.predicted_at).getTime()  : 0
+
+      // isEarly: la predicción fue hecha con al menos early_cutoff_hours de anticipación
+      const isEarly = matchDate != null
+        ? (matchDate - predictedAt) >= earlyCutoffMs
+        : true  // sin fecha de partido → puntos completos
+
       return {
         id:              p.id,
         user_id:         p.user_id,
@@ -59,23 +121,27 @@ Deno.serve(async () => {
         match_id:        p.match_id,
         home_prediction: p.home_prediction,
         away_prediction: p.away_prediction,
-        points_earned:   calcPoints(p.home_prediction, p.away_prediction, s.home, s.away),
-        updated_at:      new Date().toISOString(),
+        points_earned:   calcPoints(
+          p.home_prediction, p.away_prediction,
+          match.home_score, match.away_score,
+          isEarly, cfg,
+        ),
+        updated_at: new Date().toISOString(),
+        // predicted_at NO se incluye para preservar el tiempo de modificación del usuario
       }
     })
 
-    // 4. Upsert — actualiza points_earned en las predicciones existentes
+    // 5. Upsert
     const { error: uErr } = await supabase
       .from('match_predictions')
       .upsert(rows, { onConflict: 'id' })
 
     if (uErr) throw uErr
 
-    const breakdown = { '3pts': 0, '1pt': 0, '0pts': 0 }
+    const breakdown: Record<string, number> = {}
     rows.forEach((r: any) => {
-      if (r.points_earned === 3) breakdown['3pts']++
-      else if (r.points_earned === 1) breakdown['1pt']++
-      else breakdown['0pts']++
+      const k = `${r.points_earned}pts`
+      breakdown[k] = (breakdown[k] ?? 0) + 1
     })
 
     return new Response(

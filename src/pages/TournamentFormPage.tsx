@@ -24,10 +24,9 @@ interface FormState {
   team_type:           'national' | 'club'
   direct_qualifiers:   string
   best_third_count:    string
-  has_knockout:        boolean
-  has_bonus:           boolean
-  prediction_deadline: string  // datetime-local string
-  is_hidden:           boolean
+  has_knockout: boolean
+  has_bonus:    boolean
+  is_hidden:    boolean
 }
 
 const INITIAL: FormState = {
@@ -39,9 +38,8 @@ const INITIAL: FormState = {
   direct_qualifiers: '2',
   best_third_count: '0',
   has_knockout: true,
-  has_bonus: true,
-  prediction_deadline: '',
-  is_hidden: false,
+  has_bonus:    true,
+  is_hidden:    false,
 }
 
 export default function TournamentFormPage() {
@@ -96,9 +94,6 @@ export default function TournamentFormPage() {
       best_third_count:    String(pc.best_third_count ?? 0),
       has_knockout:        pc.has_knockout ?? true,
       has_bonus:           pc.has_bonus ?? true,
-      prediction_deadline: t.prediction_deadline
-        ? new Date(t.prediction_deadline).toISOString().slice(0, 16)
-        : '',
       is_hidden: t.is_hidden ?? false,
     })
   }
@@ -176,9 +171,7 @@ export default function TournamentFormPage() {
           image_file:          form.image_file,
           team_type:           form.team_type,
           prode_config:        prodeConfig,
-          prediction_deadline: form.prediction_deadline
-            ? new Date(form.prediction_deadline).toISOString()
-            : null,
+          prediction_deadline: null,
         })
       }
       navigate('/torneos')
@@ -484,23 +477,6 @@ export default function TournamentFormPage() {
                   value={form.has_bonus}
                   onChange={v => set({ has_bonus: v })}
                 />
-              </div>
-
-              {/* Fecha límite */}
-              <div className="space-y-2">
-                <label className="label">
-                  Fecha límite para predecir
-                  <span className="text-muted-dark font-normal ml-1">(opcional)</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={form.prediction_deadline}
-                  onChange={e => set({ prediction_deadline: e.target.value })}
-                  className="input"
-                />
-                <p className="text-muted-dark text-xs">
-                  Si no la especificás, se calculará automáticamente como 2 horas antes del primer partido.
-                </p>
               </div>
 
             </div>

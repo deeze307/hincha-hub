@@ -11,6 +11,7 @@ export interface MatchPrediction {
   home_prediction:  number | null
   away_prediction:  number | null
   points_earned?:   number | null
+  is_modified?:     boolean
 }
 
 export async function fetchUserPredictions(
@@ -21,7 +22,7 @@ export async function fetchUserPredictions(
 
   const { data, error } = await supabase
     .from('match_predictions')
-    .select('id, tournament_id, match_id, home_prediction, away_prediction, points_earned')
+    .select('id, tournament_id, match_id, home_prediction, away_prediction, points_earned, is_modified')
     .eq('user_id', user.id)
     .eq('tournament_id', tournamentId)
 
@@ -31,18 +32,21 @@ export async function fetchUserPredictions(
 
 export async function saveMatchPredictions(
   tournamentId: string,
-  predictions:  Array<{ match_id: string; home: number | null; away: number | null }>,
+  predictions:  Array<{ match_id: string; home: number | null; away: number | null; is_new: boolean }>,
 ): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
+  const now = new Date().toISOString()
   const rows = predictions.map(p => ({
     user_id:          user.id,
     tournament_id:    tournamentId,
     match_id:         p.match_id,
     home_prediction:  p.home,
     away_prediction:  p.away,
-    updated_at:       new Date().toISOString(),
+    is_modified:      !p.is_new,   // false for first save, true for the one allowed modification
+    predicted_at:     now,
+    updated_at:       now,
   }))
 
   const { error } = await supabase
@@ -55,15 +59,16 @@ export async function saveMatchPredictions(
 // ─── Bonus predictions ──────────────────────────────────────────
 
 export interface BonusPrediction {
-  id?:           string
-  tournament_id: string
-  type:          'champion' | 'top_scorer'
-  rank:          1 | 2 | 3
-  team_id?:      string | null
-  player_id?:    string | null
-  team_name?:    string | null
-  player_name?:  string | null
+  id?:            string
+  tournament_id:  string
+  type:           'champion' | 'top_scorer'
+  rank:           1 | 2 | 3
+  team_id?:       string | null
+  player_id?:     string | null
+  team_name?:     string | null
+  player_name?:   string | null
   points_earned?: number | null
+  is_modified?:   boolean
 }
 
 export async function fetchUserBonusPredictions(
@@ -74,7 +79,7 @@ export async function fetchUserBonusPredictions(
 
   const { data, error } = await supabase
     .from('bonus_predictions')
-    .select('id, tournament_id, type, rank, team_id, player_id, team_name, player_name, points_earned')
+    .select('id, tournament_id, type, rank, team_id, player_id, team_name, player_name, points_earned, is_modified')
     .eq('user_id', user.id)
     .eq('tournament_id', tournamentId)
 
@@ -98,6 +103,7 @@ export async function saveBonusPredictions(
     player_id:     b.player_id ?? null,
     team_name:     b.team_name ?? null,
     player_name:   b.player_name ?? null,
+    is_modified:   b.is_modified ?? false,
     updated_at:    new Date().toISOString(),
   }))
 
@@ -110,13 +116,25 @@ export async function saveBonusPredictions(
 
 // ─── Helpers ────────────────────────────────────────────────────
 
+// isEarly = prediction was made ≥ 24h before the match
 export function calcPoints(
   homePred: number | null, awayPred: number | null,
   homeReal: number | null, awayReal: number | null,
+  isEarly = true,
 ): number | null {
   if (homePred == null || awayPred == null || homeReal == null || awayReal == null) return null
-  if (homePred === homeReal && awayPred === awayReal) return 3
-  const predSign = Math.sign(homePred - awayPred)
-  const realSign = Math.sign(homeReal - awayReal)
-  return predSign === realSign ? 1 : 0
+
+  const exactHome  = homePred === homeReal
+  const exactAway  = awayPred === awayReal
+
+  if (exactHome && exactAway) return isEarly ? 12 : 6
+
+  const predWinner = Math.sign(homePred - awayPred)
+  const realWinner = Math.sign(homeReal - awayReal)
+  const winnerMatch = predWinner === realWinner
+
+  if (winnerMatch && (exactHome || exactAway)) return isEarly ? 8 : 4
+  if (winnerMatch)                             return isEarly ? 6 : 3
+  if (exactHome || exactAway)                  return isEarly ? 2 : 1
+  return 0
 }
