@@ -6,6 +6,7 @@ import ProdePage from './pages/ProdePage'
 import RankingsPage from './pages/RankingsPage'
 import ProfilePage from './pages/ProfilePage'
 import ComingSoon from './pages/ComingSoon'
+import MatchesPage from './pages/MatchesPage'
 import ConfiguracionPage from './pages/ConfiguracionPage'
 import NotificationsPage from './pages/NotificationsPage'
 import TournamentsPage from './pages/TournamentsPage'
@@ -27,7 +28,7 @@ export default function App() {
           <Route path="/torneos/:id/prode"    element={<TournamentProdePage />} />
           <Route path="/torneos/:id/ranking"  element={<TournamentRankingPage />} />
           <Route path="/solicitudes"          element={<RequestsPage />} />
-          <Route path="/partidos"             element={<ComingSoon title="Partidos" />} />
+          <Route path="/partidos"             element={<MatchesPage />} />
           <Route path="/predecir"             element={<ProdePage />} />
           <Route path="/prode"                element={<Navigate to="/predecir" replace />} />
           <Route path="/ranking"              element={<RankingsPage />} />

@@ -9,6 +9,7 @@ import {
 import type { Competition } from '../services/competitionsService'
 import type { Tournament, ProdeConfig } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 interface FormState {
   name:                string
@@ -173,8 +174,13 @@ export default function TournamentFormPage() {
           prode_config:        prodeConfig,
           prediction_deadline: null,
         })
+        // Sync automático en background: equipos + fixture + jugadores
+        // No esperamos para no bloquear al usuario
+        supabase.functions.invoke('sync-fixtures')
+          .then(() => supabase.functions.invoke('sync-squads'))
+          .catch(e => console.error('Background sync failed:', e))
       }
-      navigate('/torneos')
+      navigate('/torneos', { state: { justCreated: !isEdit } })
     } catch (err: any) {
       setError(err.message)
     } finally {

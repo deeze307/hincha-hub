@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock } from 'lucide-react'
 import { fetchTournaments, joinTournament, requestJoinTournament } from '../services/tournamentsService'
 import type { Tournament } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,11 +19,21 @@ type Tab = 'all' | 'mine' | 'managed'
 export default function TournamentsPage() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
+  const location    = useLocation()
 
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading]         = useState(true)
   const [tab, setTab]                 = useState<Tab>('all')
   const [joining, setJoining]         = useState<string | null>(null)
+  const [showSyncBanner, setShowSyncBanner] = useState(
+    () => (location.state as any)?.justCreated === true
+  )
+
+  useEffect(() => {
+    if (!showSyncBanner) return
+    const t = setTimeout(() => setShowSyncBanner(false), 20_000)
+    return () => clearTimeout(t)
+  }, [showSyncBanner])
 
   const isSuperAdmin = profile?.role === 'superadmin'
 
@@ -73,6 +83,23 @@ export default function TournamentsPage() {
           </button>
         )}
       </div>
+
+      {/* Banner de sincronización */}
+      {showSyncBanner && (
+        <div className="flex items-start gap-3 bg-brand/10 border border-brand/30 rounded-xl px-4 py-3">
+          <Clock size={16} className="text-brand shrink-0 mt-0.5" />
+          <p className="text-sm text-text flex-1 leading-snug">
+            <span className="font-semibold">Tu torneo se está sincronizando.</span>
+            {' '}En unos minutos vas a poder ver todos los partidos y equipos cargados.
+          </p>
+          <button
+            onClick={() => setShowSyncBanner(false)}
+            className="text-muted hover:text-text transition-colors shrink-0 mt-0.5"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-elevated p-1 rounded-md w-fit">

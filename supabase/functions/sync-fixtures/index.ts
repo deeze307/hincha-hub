@@ -63,7 +63,7 @@ Deno.serve(async (_req) => {
     // 1. Obtener todas las competencias con torneos activos
     const { data: tournaments } = await supabase
       .from('tournaments')
-      .select('competition_id, competitions(external_id, season_year)')
+      .select('competition_id, team_type, competitions(external_id, season_year)')
       .not('competition_id', 'is', null)
 
     if (!tournaments?.length) {
@@ -82,6 +82,7 @@ Deno.serve(async (_req) => {
         competitionId: t.competition_id as string,
         externalId:    (t.competitions as any)?.external_id as number,
         seasonYear:    (t.competitions as any)?.season_year as number,
+        teamType:      (t as any).team_type ?? 'club',
       }))
       .filter(c => c.externalId && c.seasonYear)
 
@@ -100,17 +101,35 @@ Deno.serve(async (_req) => {
       const fixtures = data?.response ?? []
       if (!fixtures.length) continue
 
-      // 4. Resolver team_ids en Supabase
-      const teamExternalIds: number[] = []
+      // 4a. Upsert equipos desde el fixture (ignoreDuplicates para no pisar datos de sync-squads)
+      const uniqueTeams = new Map<number, object>()
       for (const f of fixtures) {
-        if (f.teams?.home?.id) teamExternalIds.push(f.teams.home.id)
-        if (f.teams?.away?.id) teamExternalIds.push(f.teams.away.id)
+        for (const side of ['home', 'away'] as const) {
+          const t = f.teams?.[side]
+          if (t?.id && t?.name && !uniqueTeams.has(t.id)) {
+            uniqueTeams.set(t.id, {
+              external_id: t.id,
+              name:        t.name,
+              logo_url:    t.logo ?? null,
+              type:        comp.teamType,
+            })
+          }
+        }
       }
+      if (uniqueTeams.size > 0) {
+        const { error: teamsErr } = await supabase
+          .from('teams')
+          .upsert([...uniqueTeams.values()], { onConflict: 'external_id', ignoreDuplicates: true })
+        if (teamsErr) console.error('Teams upsert error:', teamsErr)
+      }
+
+      // 4b. Resolver team_ids en Supabase
+      const teamExternalIds = [...uniqueTeams.keys()]
 
       const { data: dbTeams } = await supabase
         .from('teams')
         .select('id, external_id')
-        .in('external_id', [...new Set(teamExternalIds)])
+        .in('external_id', teamExternalIds)
 
       const teamMap = new Map((dbTeams ?? []).map(t => [t.external_id, t.id]))
 
