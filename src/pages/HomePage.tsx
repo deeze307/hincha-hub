@@ -19,7 +19,7 @@ export default function HomePage() {
 
       {/* Fila 1 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-5">
-        <NextMatchCard />
+        {/* <NextMatchCard /> */}
         <MatchesCard />
         <MyTournamentsCard />
         <RecentActivityCard />
