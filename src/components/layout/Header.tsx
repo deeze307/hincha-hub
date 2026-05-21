@@ -33,9 +33,10 @@ export default function Header() {
   const userRef = useRef<HTMLDivElement>(null)
   const bellRef = useRef<HTMLDivElement>(null)
 
-  const displayName = user?.user_metadata?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Usuario'
-  const fullName    = user?.user_metadata?.full_name ?? displayName
+  const displayName = profile?.full_name?.split(' ')[0] ?? user?.user_metadata?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Usuario'
+  const fullName    = profile?.full_name ?? user?.user_metadata?.full_name ?? displayName
   const initials    = fullName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const avatarUrl   = profile?.avatar_url ?? user?.user_metadata?.avatar_url ?? null
 
   useEffect(() => {
     if (user) {
@@ -211,12 +212,14 @@ export default function Header() {
           onClick={handleUserOpen}
           className="flex items-center gap-2.5 pl-1 pr-2 py-1 rounded-lg hover:bg-elevated transition-colors"
         >
-          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-semibold">{initials}</span>
-          </div>
+          {avatarUrl
+            ? <img src={avatarUrl} alt={displayName} className="w-8 h-8 rounded-full object-cover shrink-0" />
+            : <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center shrink-0">
+                <span className="text-white text-xs font-semibold">{initials}</span>
+              </div>
+          }
           <div className="text-left hidden sm:block">
             <p className="text-text text-sm font-semibold leading-none">{displayName}</p>
-            <p className="text-muted text-[11px] mt-0.5">1.150 pts</p>
           </div>
           <ChevronDown
             size={14}

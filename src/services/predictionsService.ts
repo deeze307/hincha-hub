@@ -30,6 +30,27 @@ export async function fetchUserPredictions(
   return data ?? []
 }
 
+export async function fetchUserPredictionsForMatches(
+  matchIds: string[],
+): Promise<Map<string, { home: number; away: number }>> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !matchIds.length) return new Map()
+
+  const { data } = await supabase
+    .from('match_predictions')
+    .select('match_id, home_prediction, away_prediction')
+    .eq('user_id', user.id)
+    .in('match_id', matchIds)
+    .not('home_prediction', 'is', null)
+    .not('away_prediction', 'is', null)
+
+  const map = new Map<string, { home: number; away: number }>()
+  for (const p of (data ?? [])) {
+    map.set(p.match_id, { home: p.home_prediction, away: p.away_prediction })
+  }
+  return map
+}
+
 export async function saveMatchPredictions(
   tournamentId: string,
   predictions:  Array<{ match_id: string; home: number | null; away: number | null; is_new: boolean }>,

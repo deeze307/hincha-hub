@@ -46,6 +46,11 @@ function isMatchLate(match: CompetitionMatch): boolean {
   return Date.now() >= new Date(match.match_date).getTime() - LATE_HOURS * 3_600_000
 }
 
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'BT', 'LIVE', 'INT'])
+function isMatchLive(match: CompetitionMatch): boolean {
+  return LIVE_STATUSES.has(match.status)
+}
+
 // ─── Cálculo de standings (puntos, GD, GF) ───────────────────────
 
 interface TeamStanding {
@@ -146,7 +151,7 @@ function ScoreBox({
       value={value}
       onChange={e => onChange(e.target.value)}
       disabled={locked}
-      className="w-10 h-9 text-center text-sm font-semibold text-text bg-elevated border border-border rounded-lg focus:outline-none focus:border-brand disabled:opacity-40 disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      className="w-10 h-9 text-center text-sm font-semibold text-text bg-elevated border border-border rounded focus:outline-none focus:border-brand disabled:opacity-40 disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
     />
   )
 }
@@ -161,12 +166,13 @@ function MatchRow({
   onChange:     (home: string, away: string) => void
   onTeamClick?: (team: TeamRef) => void
 }) {
-  const locked = isMatchLocked(match) || pred.is_modified
-  const isLate = isMatchLate(match)
-  const isPast = match.home_score != null ||
-    (match.match_date != null && new Date(match.match_date) < new Date())
+  const locked   = isMatchLocked(match) || pred.is_modified
+  const isLate   = isMatchLate(match)
+  const live     = isMatchLive(match)
+  const hasScore = match.home_score != null && match.away_score != null
+  const isPast   = hasScore || (match.match_date != null && new Date(match.match_date) < new Date())
 
-  const displayPts = (match.home_score != null && match.away_score != null) ? pred.pts : null
+  const displayPts = hasScore ? pred.pts : null
 
   const dateStr = match.match_date
     ? new Date(match.match_date).toLocaleString('es-AR', {
@@ -175,11 +181,12 @@ function MatchRow({
     : '—'
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${
+    <div className={`flex items-center gap-2 px-3 py-3 border-b border-border/40 last:border-0 ${
       isPast ? 'bg-black/20' : isLate ? 'bg-yellow-500/5' : ''
     }`}>
-      {/* Equipo local */}
-      <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+
+      {/* Equipo local: nombre + logo + resultado real */}
+      <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
         <button
           type="button"
           onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
@@ -190,10 +197,18 @@ function MatchRow({
           </span>
           <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
         </button>
+        {hasScore && (
+          <span className="text-muted-dark text-sm font-mono tabular-nums shrink-0 w-4 text-center">
+            {match.home_score}
+          </span>
+        )}
       </div>
 
-      {/* Inputs + indicador ½ pts */}
+      {/* Centro: VIVO + inputs + ½ pts */}
       <div className="flex flex-col items-center gap-0.5 shrink-0">
+        {live && (
+          <span className="text-red-500 text-[9px] font-bold uppercase tracking-wider leading-none">VIVO</span>
+        )}
         <div className="flex items-center gap-1.5">
           <ScoreBox value={pred.home} onChange={v => onChange(v, pred.away)} locked={locked} />
           <span className="text-muted-dark text-xs font-semibold">-</span>
@@ -204,8 +219,13 @@ function MatchRow({
         )}
       </div>
 
-      {/* Equipo visitante */}
-      <div className="flex-1 flex items-center gap-2 min-w-0">
+      {/* Equipo visitante: resultado real + logo + nombre */}
+      <div className="flex-1 flex items-center gap-1.5 min-w-0">
+        {hasScore && (
+          <span className="text-muted-dark text-sm font-mono tabular-nums shrink-0 w-4 text-center">
+            {match.away_score}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
@@ -218,27 +238,18 @@ function MatchRow({
         </button>
       </div>
 
-      {/* Resultado real + pts */}
-      <div className="shrink-0 w-20 text-right">
-        {match.home_score != null && match.away_score != null ? (
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-muted-dark text-xs font-mono">
-              {match.home_score} - {match.away_score}
-            </span>
-            {displayPts != null && (
-              <span className={`text-[11px] font-bold ${
-                displayPts >= 8 ? 'text-green-400' :
-                displayPts >= 3 ? 'text-yellow-400' :
-                displayPts >  0 ? 'text-orange-400' :
-                'text-red-400'
-              }`}>
-                +{displayPts}
-              </span>
-            )}
-          </div>
-        ) : (
+      {/* Pts ganados / fecha */}
+      <div className="shrink-0 w-10 text-right">
+        {displayPts != null ? (
+          <span className={`text-[11px] font-bold ${
+            displayPts >= 8 ? 'text-green-400' :
+            displayPts >= 3 ? 'text-yellow-400' :
+            displayPts >  0 ? 'text-orange-400' :
+            'text-red-400'
+          }`}>+{displayPts}</span>
+        ) : !hasScore ? (
           <span className="text-muted-dark text-[11px]">{dateStr}</span>
-        )}
+        ) : null}
       </div>
     </div>
   )

@@ -1,93 +1,230 @@
-import { Trophy, Target, Zap, Calendar, Settings } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Trophy, Zap, Users, Loader2, Camera, Flame } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { fetchMyTournamentPositions } from '../services/rankingService'
+import { uploadAvatar, fetchUserStreaks } from '../services/profileService'
+import type { MyTournamentPosition } from '../services/rankingService'
 
-const HISTORY = [
-  { fecha: 'Fecha 14', pts: 210, correct: 9,  total: 12 },
-  { fecha: 'Fecha 13', pts: 175, correct: 7,  total: 12 },
-  { fecha: 'Fecha 12', pts: 140, correct: 6,  total: 12 },
-]
+function medalFor(rank: number): string {
+  if (rank === 1) return '🥇'
+  if (rank === 2) return '🥈'
+  if (rank === 3) return '🥉'
+  return ''
+}
 
 export default function ProfilePage() {
-  const { user } = useAuth()
-  const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Usuario'
-  const initials = displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-  const email = user?.email ?? ''
+  const { user, profile, refreshProfile } = useAuth()
+  const navigate = useNavigate()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isGoogleUser = user?.app_metadata?.provider === 'google'
+
+  const displayName = profile?.full_name
+    ?? user?.user_metadata?.full_name
+    ?? user?.email?.split('@')[0]
+    ?? 'Usuario'
+  const initials  = displayName.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const email     = user?.email ?? ''
+  const avatarUrl = profile?.avatar_url ?? user?.user_metadata?.avatar_url ?? null
+
+  const [positions,      setPositions]      = useState<MyTournamentPosition[]>([])
+  const [streaks,        setStreaks]        = useState<{ current: number; best: number } | null>(null)
+  const [loading,        setLoading]        = useState(true)
+  const [uploading,      setUploading]      = useState(false)
+  const [uploadError,    setUploadError]    = useState<string | null>(null)
+
+  useEffect(() => {
+    Promise.all([
+      fetchMyTournamentPositions(20),
+      fetchUserStreaks(),
+    ]).then(([pos, str]) => {
+      setPositions(pos)
+      setStreaks(str)
+    }).catch(console.error).finally(() => setLoading(false))
+  }, [])
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+
+    const MAX_MB = 2
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setUploadError(`La imagen no puede superar ${MAX_MB} MB`)
+      return
+    }
+
+    setUploadError(null)
+    setUploading(true)
+    try {
+      await uploadAvatar(user.id, file)
+      await refreshProfile()
+    } catch (err: any) {
+      setUploadError(err.message ?? 'Error al subir la imagen')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const totalPts = positions.reduce((sum, p) => sum + p.totalPts, 0)
+  const bestRank = positions.reduce<number | null>((best, p) => {
+    if (p.rank === null) return best
+    return best === null ? p.rank : Math.min(best, p.rank)
+  }, null)
 
   return (
     <div className="max-w-2xl mx-auto px-4 lg:px-6 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-text text-xl font-semibold">Perfil</h1>
-        <button className="w-9 h-9 flex items-center justify-center rounded-lg bg-elevated border border-border text-muted hover:text-text transition-colors">
-          <Settings size={16} />
-        </button>
-      </div>
+      <h1 className="text-text text-xl font-semibold">Perfil</h1>
 
       {/* Avatar + info */}
-      <div className="bg-surface border border-border rounded-xl p-5 flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-brand flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-2xl">{initials}</span>
+      <div className="card p-5 flex items-center gap-4">
+
+        {/* Avatar con botón de subida */}
+        <div className="relative shrink-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={displayName} className="w-16 h-16 rounded-full object-cover" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-brand flex items-center justify-center">
+              <span className="text-white font-bold text-2xl">{initials}</span>
+            </div>
+          )}
+
+          {/* Botón de cámara — solo para usuarios que NO son de Google */}
+          {!isGoogleUser && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-brand border-2 border-surface flex items-center justify-center hover:bg-brand-h transition-colors disabled:opacity-60"
+                title="Cambiar foto"
+              >
+                {uploading
+                  ? <Loader2 size={12} className="text-white animate-spin" />
+                  : <Camera size={12} className="text-white" />
+                }
+              </button>
+            </>
+          )}
         </div>
+
         <div className="flex-1 min-w-0">
-          <h2 className="text-text font-semibold text-lg">{displayName}</h2>
-          <p className="text-muted text-sm mt-0.5">{email}</p>
-          <span className="inline-block mt-2 px-2.5 py-0.5 bg-brand/20 border border-brand/40 text-brand text-xs font-medium rounded-full">
-            Hincha Pro
-          </span>
+          <h2 className="text-text font-semibold text-lg leading-tight">{displayName}</h2>
+          <p className="text-muted text-sm mt-0.5 truncate">{email}</p>
+          {profile?.role && profile.role !== 'user' && (
+            <span className="inline-block mt-2 px-2.5 py-0.5 bg-brand/20 border border-brand/40 text-brand text-xs font-medium rounded-full capitalize">
+              {profile.role}
+            </span>
+          )}
+          {uploadError && (
+            <p className="text-red-400 text-xs mt-1">{uploadError}</p>
+          )}
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard icon={<Trophy size={18} className="text-brand" />}      label="Posición global"  value="#3"     sub="de 48 participantes" />
-        <StatCard icon={<Target size={18} className="text-green-400" />}   label="Efectividad"      value="47.9%"  sub="promedio general" />
-        <StatCard icon={<Zap size={18} className="text-yellow-400" />}     label="Puntos totales"   value="1.150"  sub="temporada actual" />
-        <StatCard icon={<Calendar size={18} className="text-blue-400" />}  label="Fechas jugadas"   value="14/48"  sub="progreso del torneo" />
-      </div>
-
-      {/* Historial */}
-      <section>
-        <h2 className="text-text font-semibold mb-3">Historial de fechas</h2>
-        <div className="space-y-2">
-          {HISTORY.map(h => (
-            <div key={h.fecha} className="bg-surface border border-border rounded-xl px-4 py-3 flex items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-text text-sm font-medium">{h.fecha}</p>
-                <p className="text-muted text-xs">{h.correct}/{h.total} pronósticos correctos</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-brand font-bold text-lg">{h.pts} pts</p>
-                <div className="h-1.5 w-20 bg-elevated rounded-full mt-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-brand rounded-full"
-                    style={{ width: `${(h.correct / h.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 size={22} className="text-brand animate-spin" />
         </div>
-      </section>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard
+              icon={<Users size={16} className="text-brand" />}
+              label="Torneos"
+              value={String(positions.length)}
+              sub="inscripto"
+            />
+            <StatCard
+              icon={<Trophy size={16} className="text-yellow-400" />}
+              label="Mejor pos."
+              value={bestRank !== null ? `#${bestRank}` : '—'}
+              sub="entre torneos"
+            />
+            <StatCard
+              icon={<Zap size={16} className="text-green-400" />}
+              label="Puntos"
+              value={totalPts > 0 ? totalPts.toLocaleString('es-AR') : '—'}
+              sub="acumulados"
+            />
+            <StatCard
+              icon={<Flame size={16} className="text-orange-400" />}
+              label="Racha actual"
+              value={streaks ? String(streaks.current) : '—'}
+              sub={streaks?.best ? `Mejor: ${streaks.best}` : 'aciertos seguidos'}
+              highlight={!!streaks?.current}
+            />
+          </div>
 
-      {/* CTA inscripción */}
-      <div className="bg-elevated border border-border rounded-xl p-5 text-center">
-        <p className="text-text font-semibold">¿Querés competir por el pozo?</p>
-        <p className="text-muted text-sm mt-1">Inscribite al torneo pagando la entrada</p>
-        <button className="mt-4 px-8 py-2.5 bg-brand hover:bg-brand-h text-white font-semibold rounded-lg transition-colors text-sm">
-          Inscribirme — $2.000
-        </button>
-      </div>
+          {/* Lista de torneos */}
+          <section>
+            <h2 className="text-text font-semibold mb-3">Mis torneos</h2>
+            {positions.length === 0 ? (
+              <div className="card p-8 text-center text-muted text-sm">
+                No estás inscripto en ningún torneo aún.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {positions.map(p => (
+                  <button
+                    key={p.tournamentId}
+                    onClick={() => navigate(`/torneos/${p.tournamentId}/prode`)}
+                    className="card w-full px-4 py-3 flex items-center gap-3 hover:bg-elevated/60 transition-colors text-left"
+                  >
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-elevated shrink-0 flex items-center justify-center">
+                      {p.tournamentImage
+                        ? <img src={p.tournamentImage} alt="" className="w-full h-full object-cover" />
+                        : <span className="text-text text-xs font-bold">
+                            {p.tournamentName.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+                          </span>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-text text-sm font-medium truncate">{p.tournamentName}</p>
+                      <p className="text-muted text-xs mt-0.5">
+                        {p.totalPts > 0 ? `${p.totalPts.toLocaleString('es-AR')} pts` : 'Sin predicciones aún'}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {p.rank !== null && p.rank > 0 ? (
+                        <span className="text-sm font-bold text-text">
+                          {medalFor(p.rank) || `#${p.rank}`}
+                        </span>
+                      ) : (
+                        <span className="text-muted-dark text-xs">—</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
     </div>
   )
 }
 
-function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub: string }) {
+function StatCard({
+  icon, label, value, sub, highlight = false,
+}: {
+  icon: React.ReactNode; label: string; value: string; sub: string; highlight?: boolean
+}) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-2">
+    <div className={`card p-4 ${highlight ? 'border-orange-400/30' : ''}`}>
+      <div className="flex items-center gap-1.5 mb-2">
         {icon}
         <span className="text-muted text-xs font-medium">{label}</span>
       </div>
-      <p className="text-text font-bold text-xl">{value}</p>
+      <p className={`font-bold text-xl ${highlight ? 'text-orange-400' : 'text-text'}`}>{value}</p>
       <p className="text-muted text-xs mt-0.5">{sub}</p>
     </div>
   )

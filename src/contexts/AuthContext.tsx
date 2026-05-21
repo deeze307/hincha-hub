@@ -24,6 +24,7 @@ interface AuthContextValue extends AuthState {
   signUp:           (email: string, password: string, fullName: string) => Promise<{ error: string | null }>
   signOut:          () => Promise<void>
   signInWithGoogle: () => Promise<void>
+  refreshProfile:   () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -85,8 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
+  async function refreshProfile() {
+    if (!state.user) return
+    const profile = await fetchProfile(state.user.id)
+    setState(prev => ({ ...prev, profile }))
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut, signInWithGoogle }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut, signInWithGoogle, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

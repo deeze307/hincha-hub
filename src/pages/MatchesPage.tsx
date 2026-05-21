@@ -1,15 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate }       from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useMatchDate, isSameDay, TODAY, MIN_DATE, MAX_DATE } from '../hooks/useMatchDate'
 import { useMatchesForDate, isLive }                          from '../hooks/useMatchesForDate'
 import { TeamDetailSheet }   from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail }     from '../hooks/useTeamDetail'
+import { fetchUserPredictionsForMatches } from '../services/predictionsService'
 import type { TeamDetailInfo } from '../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../services/dashboardService'
 import type { CompetitionMatch }        from '../services/matchesService'
 
-type TeamRef = { id: string; name: string; logo_url: string | null }
+type TeamRef  = { id: string; name: string; logo_url: string | null }
+type MatchPred = { home: number; away: number }
 
 // ─── Constantes ───────────────────────────────────────────────────
 
@@ -34,7 +36,11 @@ function TeamLogo({ url, name, size = 24 }: { url: string | null; name: string; 
 
 // ─── Fila de partido ──────────────────────────────────────────────
 
-function MatchRow({ match, onTeamClick }: { match: CompetitionMatch; onTeamClick?: (team: TeamRef) => void }) {
+function MatchRow({ match, pred, onTeamClick }: {
+  match:        CompetitionMatch
+  pred?:        MatchPred
+  onTeamClick?: (team: TeamRef) => void
+}) {
   const live      = isLive(match.status)
   const hasResult = match.home_score != null && match.away_score != null
   const time      = match.match_date
@@ -48,34 +54,54 @@ function MatchRow({ match, onTeamClick }: { match: CompetitionMatch; onTeamClick
           ? <span className="text-green-400 text-[10px] font-bold uppercase">EN VIVO</span>
           : <span className="text-muted-dark text-[12px] font-semibold">{time}</span>}
       </div>
-      <button
-        type="button"
-        onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
-        className="flex items-center gap-2 min-w-0 justify-end hover:opacity-70 transition-opacity"
-      >
-        <span className="text-text text-sm font-semibold truncate">{match.home_team?.name ?? '—'}</span>
-        <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
-      </button>
+
+      {/* Local: nombre + logo + pred */}
+      <div className="flex items-center gap-1.5 min-w-0 justify-end">
+        <button
+          type="button"
+          onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
+          className="flex items-center gap-2 min-w-0 justify-end hover:opacity-70 transition-opacity"
+        >
+          <span className="text-text text-sm font-semibold truncate">{match.home_team?.name ?? '—'}</span>
+          <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
+        </button>
+        {pred != null && (
+          <span className="text-muted text-[11px] font-mono tabular-nums shrink-0">{pred.home}</span>
+        )}
+      </div>
+
+      {/* Marcador central */}
       <div className="shrink-0 w-14 text-center">
         {hasResult
           ? <span className={`text-sm font-bold tabular-nums ${live ? 'text-green-400' : 'text-text'}`}>{match.home_score} - {match.away_score}</span>
           : <span className="text-muted-dark text-sm font-semibold">vs</span>}
       </div>
-      <button
-        type="button"
-        onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
-        className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
-      >
-        <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
-        <span className="text-text text-sm font-semibold truncate">{match.away_team?.name ?? '—'}</span>
-      </button>
+
+      {/* Visitante: pred + logo + nombre */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        {pred != null && (
+          <span className="text-muted text-[11px] font-mono tabular-nums shrink-0">{pred.away}</span>
+        )}
+        <button
+          type="button"
+          onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
+          className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+        >
+          <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
+          <span className="text-text text-sm font-semibold truncate">{match.away_team?.name ?? '—'}</span>
+        </button>
+      </div>
     </div>
   )
 }
 
 // ─── Sección por torneo ───────────────────────────────────────────
 
-function TournamentSection({ group, openTeamDetail }: { group: TournamentTodayMatches; openTeamDetail?: (info: TeamDetailInfo) => void }) {
+function TournamentSection({ group, predMap, openTeamDetail }: {
+  group:          TournamentTodayMatches
+  predMap:        Map<string, MatchPred>
+  openTeamDetail?: (info: TeamDetailInfo) => void
+}) {
   function handleTeamClick(team: TeamRef, m: CompetitionMatch) {
     openTeamDetail?.({
       team,
@@ -97,7 +123,12 @@ function TournamentSection({ group, openTeamDetail }: { group: TournamentTodayMa
         </span>
       </div>
       {group.matches.map(m => (
-        <MatchRow key={m.id} match={m} onTeamClick={(team) => handleTeamClick(team, m)} />
+        <MatchRow
+          key={m.id}
+          match={m}
+          pred={predMap.get(m.id)}
+          onTeamClick={(team) => handleTeamClick(team, m)}
+        />
       ))}
     </div>
   )
@@ -212,8 +243,16 @@ export default function MatchesPage() {
   const { loading, liveCount, filteredGroups }
     = useMatchesForDate(date)
 
-  const [filter, setFilter] = useState<'all' | 'live'>('all')
+  const [filter,  setFilter]  = useState<'all' | 'live'>('all')
+  const [predMap, setPredMap] = useState<Map<string, MatchPred>>(new Map())
   const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
+
+  useEffect(() => {
+    if (loading) return
+    const allIds = filteredGroups('all').flatMap(g => g.matches.map(m => m.id))
+    if (!allIds.length) { setPredMap(new Map()); return }
+    fetchUserPredictionsForMatches(allIds).then(setPredMap).catch(() => {})
+  }, [date, loading])
 
   const shown = filteredGroups(filter)
 
@@ -312,7 +351,7 @@ export default function MatchesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {shown.map(g => <TournamentSection key={g.tournamentId} group={g} openTeamDetail={openTeamDetail} />)}
+          {shown.map(g => <TournamentSection key={g.tournamentId} group={g} predMap={predMap} openTeamDetail={openTeamDetail} />)}
         </div>
       )}
 
