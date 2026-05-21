@@ -1,4 +1,4 @@
-import NextMatchCard        from '../components/organisms/dashboard/NextMatchCard'
+// import NextMatchCard        from '../components/organisms/dashboard/NextMatchCard'
 import MatchesCard          from '../components/organisms/dashboard/MatchesCard'
 import MyTournamentsCard    from '../components/organisms/dashboard/MyTournamentsCard'
 import RecentActivityCard   from '../components/organisms/dashboard/RecentActivityCard'
