@@ -86,34 +86,45 @@ export async function fetchTournaments(): Promise<Tournament[]> {
     isSuperAdmin = profile?.role === 'superadmin'
   }
 
-  const visible = isSuperAdmin ? tournaments : tournaments.filter((t: any) => !t.is_hidden)
+  if (!user) {
+    const visible = isSuperAdmin ? tournaments : tournaments.filter((t: any) => !t.is_hidden)
+    return visible.map(t => ({
+      ...t,
+      participant_count:   t.participant_count?.[0]?.count ?? 0,
+      is_registered:       false,
+      has_pending_request: false,
+    }))
+  }
 
-  if (!user) return visible
+  const allIds = tournaments.map(t => t.id)
 
-  const ids = visible.map(t => t.id)
-  if (!ids.length) return visible
-
-  // Traer inscripciones y solicitudes del usuario actual
+  // Traer inscripciones y solicitudes del usuario sobre TODOS los torneos
+  // (incluyendo ocultos) para poder mostrar los ocultos en los que está inscripto
   const [{ data: regs }, { data: reqs }] = await Promise.all([
     supabase.from('tournament_registrations')
       .select('tournament_id')
       .eq('user_id', user.id)
-      .in('tournament_id', ids),
+      .in('tournament_id', allIds),
     supabase.from('join_requests')
       .select('tournament_id, status')
       .eq('user_id', user.id)
       .eq('status', 'pending')
-      .in('tournament_id', ids),
+      .in('tournament_id', allIds),
   ])
 
   const regSet     = new Set((regs ?? []).map((r: any) => r.tournament_id))
   const pendingSet = new Set((reqs ?? []).map((r: any) => r.tournament_id))
 
+  // Visible: no oculto, O el usuario está inscripto, O es superadmin
+  const visible = isSuperAdmin
+    ? tournaments
+    : tournaments.filter((t: any) => !t.is_hidden || regSet.has(t.id))
+
   return visible.map(t => ({
     ...t,
-    participant_count:    t.participant_count?.[0]?.count ?? 0,
-    is_registered:        regSet.has(t.id),
-    has_pending_request:  pendingSet.has(t.id),
+    participant_count:   t.participant_count?.[0]?.count ?? 0,
+    is_registered:       regSet.has(t.id),
+    has_pending_request: pendingSet.has(t.id),
   }))
 }
 
