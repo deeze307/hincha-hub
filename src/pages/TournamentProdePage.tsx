@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
+import { useTeamDetail } from '../hooks/useTeamDetail'
 import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
@@ -149,12 +151,15 @@ function ScoreBox({
   )
 }
 
+type TeamRef = { id: string; name: string; logo_url: string | null }
+
 function MatchRow({
-  match, pred, onChange,
+  match, pred, onChange, onTeamClick,
 }: {
-  match:    CompetitionMatch
-  pred:     ScoreInput
-  onChange: (home: string, away: string) => void
+  match:        CompetitionMatch
+  pred:         ScoreInput
+  onChange:     (home: string, away: string) => void
+  onTeamClick?: (team: TeamRef) => void
 }) {
   const locked = isMatchLocked(match) || pred.is_modified
   const isLate = isMatchLate(match)
@@ -175,10 +180,16 @@ function MatchRow({
     }`}>
       {/* Equipo local */}
       <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-        <span className={`text-sm font-medium truncate text-right hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
-          {match.home_team?.name ?? '—'}
-        </span>
-        <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
+        <button
+          type="button"
+          onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
+          className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+        >
+          <span className={`text-sm font-medium truncate text-right hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
+            {match.home_team?.name ?? '—'}
+          </span>
+          <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
+        </button>
       </div>
 
       {/* Inputs + indicador ½ pts */}
@@ -195,10 +206,16 @@ function MatchRow({
 
       {/* Equipo visitante */}
       <div className="flex-1 flex items-center gap-2 min-w-0">
-        <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
-        <span className={`text-sm font-medium truncate hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
-          {match.away_team?.name ?? '—'}
-        </span>
+        <button
+          type="button"
+          onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
+          className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+        >
+          <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
+          <span className={`text-sm font-medium truncate hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
+            {match.away_team?.name ?? '—'}
+          </span>
+        </button>
       </div>
 
       {/* Resultado real + pts */}
@@ -228,59 +245,65 @@ function MatchRow({
 }
 
 function GroupStandingsTable({
-  standings, qualifiers, showBestThird,
+  standings, qualifiers, showBestThird, highlightTeamId, compact,
 }: {
-  standings:     TeamStanding[]
-  qualifiers:    number
-  showBestThird: boolean
+  standings:        TeamStanding[]
+  qualifiers:       number
+  showBestThird:    boolean
+  highlightTeamId?: string
+  compact?:         boolean
 }) {
+  const cell = compact ? 'px-1 py-1' : 'px-2 py-1.5'
+  const nameW = compact ? 'max-w-[3.5rem]' : 'max-w-24'
   return (
     <div className="mt-3 rounded-lg overflow-hidden border border-border/50">
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-elevated">
-            <th className="px-2 py-1.5 text-left text-muted font-semibold w-5">#</th>
-            <th className="px-2 py-1.5 text-left text-muted font-semibold">Equipo</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">PJ</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">PG</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">PE</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">PP</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">GD</th>
-            <th className="px-2 py-1.5 text-center text-muted font-semibold">Pts</th>
+            <th className={`${cell} text-left text-muted font-semibold w-4`}>#</th>
+            <th className={`${cell} text-left text-muted font-semibold`}>Equipo</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>PJ</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>PG</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>PE</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>PP</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>GD</th>
+            <th className={`${cell} text-center text-muted font-semibold`}>Pts</th>
           </tr>
         </thead>
         <tbody>
           {standings.map((s, i) => {
             const isQ = i < qualifiers
             const is3rd = !isQ && i === qualifiers
+            const isHighlighted = highlightTeamId === s.teamId
             return (
               <tr
                 key={s.teamId}
                 className={`border-t border-border/30 ${
+                  isHighlighted ? 'bg-brand/10' :
                   isQ ? 'bg-green-500/5' : is3rd && showBestThird ? 'bg-yellow-500/5' : ''
                 }`}
               >
-                <td className="px-2 py-1.5 text-center">
+                <td className={`${cell} text-center`}>
                   <span className={`text-[10px] font-bold ${
                     isQ ? 'text-green-400' : is3rd && showBestThird ? 'text-yellow-400' : 'text-muted'
                   }`}>
                     {i + 1}
                   </span>
                 </td>
-                <td className="px-2 py-1.5">
-                  <div className="flex items-center gap-1.5">
+                <td className={cell}>
+                  <div className="flex items-center gap-1">
                     <TeamLogo url={s.logoUrl} name={s.teamName} size={14} />
-                    <span className="text-text font-medium truncate max-w-24">{s.teamName}</span>
+                    <span className={`text-text font-medium truncate ${nameW}`}>{s.teamName}</span>
                   </div>
                 </td>
-                <td className="px-2 py-1.5 text-center text-muted">{s.pj}</td>
-                <td className="px-2 py-1.5 text-center text-muted">{s.pg}</td>
-                <td className="px-2 py-1.5 text-center text-muted">{s.pe}</td>
-                <td className="px-2 py-1.5 text-center text-muted">{s.pp}</td>
-                <td className="px-2 py-1.5 text-center text-muted">
+                <td className={`${cell} text-center text-muted`}>{s.pj}</td>
+                <td className={`${cell} text-center text-muted`}>{s.pg}</td>
+                <td className={`${cell} text-center text-muted`}>{s.pe}</td>
+                <td className={`${cell} text-center text-muted`}>{s.pp}</td>
+                <td className={`${cell} text-center text-muted`}>
                   {s.pj > 0 ? (s.gf - s.gc > 0 ? '+' : '') + (s.gf - s.gc) : '—'}
                 </td>
-                <td className="px-2 py-1.5 text-center font-bold text-text">{s.pts}</td>
+                <td className={`${cell} text-center font-bold text-text`}>{s.pts}</td>
               </tr>
             )
           })}
@@ -510,7 +533,10 @@ const RANK_META = [
   { rank: 3 as const, label: '3ª opción', pts: 3,  medal: '🥉' },
 ]
 
-function BonusTab({ tournament, locked }: { tournament: Tournament; locked: boolean }) {
+interface BonusTabHandle { save: () => Promise<void>; isLocked: boolean }
+
+const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: boolean }>(
+({ tournament, locked }, ref) => {
   const [champions,        setChampions]        = useState<[SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]>([null, null, null])
   const [scorers,          setScorers]          = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
   const [savedKeys,        setSavedKeys]        = useState<Set<string>>(new Set())
@@ -551,7 +577,7 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
   // Effective lock: time-locked by parent OR already used their one modification
   const effectiveLocked = locked || bonusIsModified
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     if (effectiveLocked) return
     setSaving(true)
     try {
@@ -565,7 +591,7 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
           rank:          (i + 1) as 1|2|3,
           team_id:       c.id,
           team_name:     c.name,
-          is_modified:   savedKeys.has(key),  // true = this is a modification of an existing row
+          is_modified:   savedKeys.has(key),
         })
       })
       scorers.forEach((s, i) => {
@@ -583,7 +609,6 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
       if (bonuses.length === 0) return
       await saveBonusPredictions(tournament.id, bonuses)
 
-      // Update local state to reflect what was saved
       const newSavedKeys = new Set(savedKeys)
       let nowModified = false
       bonuses.forEach(b => {
@@ -599,7 +624,9 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
     } finally {
       setSaving(false)
     }
-  }
+  }, [effectiveLocked, champions, scorers, savedKeys, tournament.id])
+
+  useImperativeHandle(ref, () => ({ save: handleSave, isLocked: effectiveLocked }), [handleSave, effectiveLocked])
 
   if (loading) {
     return (
@@ -633,12 +660,12 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
         <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
           <Trophy size={16} className="text-brand" />
           <h3 className="text-text text-sm font-semibold">Campeón del Torneo</h3>
-          <span className="text-muted text-xs ml-auto">si acertás con tu opción</span>
+          <span className="text-muted text-xs ml-auto hidden sm:block">si acertás con tu opción</span>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="p-3 space-y-2.5">
           {RANK_META.map(({ rank, label, pts, medal }) => (
-            <div key={rank} className="flex items-center gap-3">
-              <div className="w-28 shrink-0 flex items-center gap-1.5">
+            <div key={rank} className="flex items-center gap-2">
+              <div className="w-20 shrink-0 flex items-center gap-1.5">
                 <span className="text-lg leading-none">{medal}</span>
                 <div>
                   <p className="text-text text-xs font-semibold">{label}</p>
@@ -669,12 +696,12 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
           <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
             <Star size={16} className="text-brand" />
             <h3 className="text-text text-sm font-semibold">Goleador del Torneo</h3>
-            <span className="text-muted text-xs ml-auto">si acertás con tu opción</span>
+            <span className="text-muted text-xs ml-auto hidden sm:block">si acertás con tu opción</span>
           </div>
-          <div className="p-4 space-y-3">
+          <div className="p-3 space-y-2.5">
             {RANK_META.map(({ rank, label, pts, medal }) => (
-              <div key={rank} className="flex items-center gap-3">
-                <div className="w-28 shrink-0 flex items-center gap-1.5">
+              <div key={rank} className="flex items-center gap-2">
+                <div className="w-20 shrink-0 flex items-center gap-1.5">
                   <span className="text-lg leading-none">{medal}</span>
                   <div>
                     <p className="text-text text-xs font-semibold">{label}</p>
@@ -700,23 +727,11 @@ function BonusTab({ tournament, locked }: { tournament: Tournament; locked: bool
         </div>
       )}
 
-      {/* Guardar */}
-      {!effectiveLocked && (
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="btn-primary flex items-center gap-2"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
-            {saved ? 'Guardado' : 'Guardar Bonus'}
-          </button>
-        </div>
-      )}
     </div>
   )
-}
+})
 
+// (TeamDetailSheet moved to src/components/organisms/TeamDetailSheet.tsx)
 // ─── Página principal ─────────────────────────────────────────────
 
 export default function TournamentProdePage() {
@@ -732,7 +747,9 @@ export default function TournamentProdePage() {
   const [tab,        setTab]        = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
   const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
   const [rankingLoading, setRankingLoading] = useState(false)
-  const [myUserId,   setMyUserId]   = useState<string | null>(null)
+  const [myUserId, setMyUserId] = useState<string | null>(null)
+  const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
+  const bonusRef = useRef<BonusTabHandle>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMyUserId(data.user?.id ?? null))
@@ -790,6 +807,16 @@ export default function TournamentProdePage() {
     load()
   }, [id])
 
+  function handleTeamClick(team: TeamRef) {
+    if (!tournament?.competition_id) return
+    openTeamDetail({
+      team,
+      competitionId:   tournament.competition_id,
+      seasonYear:      (tournament as any).competition?.season_year ?? new Date().getFullYear(),
+      competitionName: tournament.competition?.name ?? null,
+    })
+  }
+
   const anyUnlocked = useMemo(
     () => matches.some(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified)),
     [matches, predMap],
@@ -829,36 +856,39 @@ export default function TournamentProdePage() {
     if (!id) return
     setSaving(true)
     try {
-      const toSave = [...predMap.entries()]
-        .filter(([match_id, v]) => {
-          if (v.home === '' && v.away === '') return false
-          if (v.is_modified) return false  // already used their one edit — skip
-          const match = matches.find(m => m.id === match_id)
-          return match && !isMatchLocked(match)
-        })
-        .map(([match_id, v]) => ({
-          match_id,
-          home:   v.home !== '' ? parseInt(v.home) : null,
-          away:   v.away !== '' ? parseInt(v.away) : null,
-          is_new: !v.exists_in_db,
-        }))
+      if (tab === 'bonus') {
+        await bonusRef.current?.save()
+      } else {
+        const toSave = [...predMap.entries()]
+          .filter(([match_id, v]) => {
+            if (v.home === '' && v.away === '') return false
+            if (v.is_modified) return false
+            const match = matches.find(m => m.id === match_id)
+            return match && !isMatchLocked(match)
+          })
+          .map(([match_id, v]) => ({
+            match_id,
+            home:   v.home !== '' ? parseInt(v.home) : null,
+            away:   v.away !== '' ? parseInt(v.away) : null,
+            is_new: !v.exists_in_db,
+          }))
 
-      if (toSave.length) {
-        await saveMatchPredictions(id, toSave)
-        // Update predMap: new entries get exists_in_db=true; updated entries get is_modified=true
-        setPredMap(prev => {
-          const next = new Map(prev)
-          for (const p of toSave) {
-            const existing = prev.get(p.match_id)
-            if (!existing) continue
-            next.set(p.match_id, {
-              ...existing,
-              exists_in_db: true,
-              is_modified:  !p.is_new,  // only mark modified if it was an update
-            })
-          }
-          return next
-        })
+        if (toSave.length) {
+          await saveMatchPredictions(id, toSave)
+          setPredMap(prev => {
+            const next = new Map(prev)
+            for (const p of toSave) {
+              const existing = prev.get(p.match_id)
+              if (!existing) continue
+              next.set(p.match_id, {
+                ...existing,
+                exists_in_db: true,
+                is_modified:  !p.is_new,
+              })
+            }
+            return next
+          })
+        }
       }
 
       setSaved(true)
@@ -879,7 +909,7 @@ export default function TournamentProdePage() {
   if (!tournament) return null
 
   const tabs = [
-    { key: 'groups',   label: 'Fase de Grupos' },
+    { key: 'groups',   label: 'Grupos' },
     ...(config?.has_knockout ? [{ key: 'knockout', label: 'Eliminatoria' }] : []),
     ...(config?.has_bonus    ? [{ key: 'bonus',    label: 'Bonus' }]       : []),
     { key: 'ranking',  label: 'Ranking' },
@@ -894,7 +924,7 @@ export default function TournamentProdePage() {
   }).length
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-5 max-w-5xl">
 
       {/* Header */}
       <div className="flex flex-col gap-2">
@@ -915,46 +945,61 @@ export default function TournamentProdePage() {
         </div>
 
         {/* Fila 2: estado / acciones */}
-        <div className="flex items-center justify-between gap-3 pl-11">
-          {!anyUnlocked ? (
-            <div className="flex items-center gap-2 text-muted text-sm">
-              <Lock size={14} />
-              <span>Predicciones cerradas</span>
-            </div>
-          ) : (
-            <>
-              <span className="text-muted text-xs">
-                {filledCount}/{unlockedGroupMatches.length} partidos por jugar
-              </span>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="btn-primary flex items-center gap-2 shrink-0"
-              >
-                {saving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : saved ? (
-                  <CheckCircle size={14} />
-                ) : (
-                  <Save size={14} />
-                )}
-                {saved ? 'Guardado' : 'Guardar'}
-              </button>
-            </>
-          )}
-        </div>
+        {tab !== 'ranking' && (
+          <div className="flex items-center justify-between gap-3 pl-11">
+            {tab === 'bonus' ? (
+              bonusRef.current?.isLocked ? (
+                <div className="flex items-center gap-2 text-muted text-sm">
+                  <Lock size={14} />
+                  <span>Bonus cerrado</span>
+                </div>
+              ) : (
+                <>
+                  <span className="text-muted text-xs">Campeón y goleador del torneo</span>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="btn-primary flex items-center gap-2 shrink-0"
+                  >
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                    {saved ? 'Guardado' : 'Guardar'}
+                  </button>
+                </>
+              )
+            ) : !anyUnlocked ? (
+              <div className="flex items-center gap-2 text-muted text-sm">
+                <Lock size={14} />
+                <span>Predicciones cerradas</span>
+              </div>
+            ) : (
+              <>
+                <span className="text-muted text-xs">
+                  {filledCount}/{unlockedGroupMatches.length} partidos por jugar
+                </span>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="btn-primary flex items-center gap-2 shrink-0"
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                  {saved ? 'Guardado' : 'Guardar'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Info de puntuación */}
       <ScoringInfoBanner />
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-elevated p-1 rounded-md w-fit">
+      <div className="flex gap-1 bg-elevated p-1 rounded-md w-full sm:w-fit">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 rounded-[8px] text-sm font-semibold transition-all ${
+            className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 rounded-[8px] text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
               tab === t.key ? 'bg-brand text-white' : 'text-muted hover:text-text'
             }`}
           >
@@ -980,6 +1025,7 @@ export default function TournamentProdePage() {
                       match={m}
                       pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
                       onChange={(h, a) => setPred(m.id, h, a)}
+                      onTeamClick={handleTeamClick}
                     />
                   ))}
                 </div>
@@ -1011,12 +1057,13 @@ export default function TournamentProdePage() {
           roundsMap={knockoutRoundsMap}
           predMap={predMap}
           onPred={setPred}
+          onTeamClick={handleTeamClick}
         />
       )}
 
       {/* ── Bonus ── */}
       {tab === 'bonus' && (
-        <BonusTab tournament={tournament} locked={bonusLocked} />
+        <BonusTab ref={bonusRef} tournament={tournament} locked={bonusLocked} />
       )}
 
       {/* ── Ranking ── */}
@@ -1026,6 +1073,11 @@ export default function TournamentProdePage() {
           loading={rankingLoading}
           myUserId={myUserId}
         />
+      )}
+
+      {/* ── Team detail sheet / modal ── */}
+      {teamDetail && (
+        <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />
       )}
 
     </div>
@@ -1154,11 +1206,12 @@ function ScoringInfoBanner() {
 // ─── Tab Eliminatoria ─────────────────────────────────────────────
 
 function KnockoutTab({
-  roundsMap, predMap, onPred,
+  roundsMap, predMap, onPred, onTeamClick,
 }: {
-  roundsMap: Map<string, CompetitionMatch[]>
-  predMap:   PredMap
-  onPred:    (matchId: string, home: string, away: string) => void
+  roundsMap:    Map<string, CompetitionMatch[]>
+  predMap:      PredMap
+  onPred:       (matchId: string, home: string, away: string) => void
+  onTeamClick?: (team: TeamRef) => void
 }) {
   if (roundsMap.size === 0) {
     return (
@@ -1197,6 +1250,7 @@ function KnockoutTab({
                     match={m}
                     pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
                     onChange={(h, a) => onPred(m.id, h, a)}
+                    onTeamClick={onTeamClick}
                   />
                 ))
               }

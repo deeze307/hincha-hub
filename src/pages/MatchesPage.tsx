@@ -3,8 +3,13 @@ import { useNavigate }       from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useMatchDate, isSameDay, TODAY, MIN_DATE, MAX_DATE } from '../hooks/useMatchDate'
 import { useMatchesForDate, isLive }                          from '../hooks/useMatchesForDate'
+import { TeamDetailSheet }   from '../components/organisms/TeamDetailSheet'
+import { useTeamDetail }     from '../hooks/useTeamDetail'
+import type { TeamDetailInfo } from '../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../services/dashboardService'
 import type { CompetitionMatch }        from '../services/matchesService'
+
+type TeamRef = { id: string; name: string; logo_url: string | null }
 
 // ─── Constantes ───────────────────────────────────────────────────
 
@@ -29,7 +34,7 @@ function TeamLogo({ url, name, size = 24 }: { url: string | null; name: string; 
 
 // ─── Fila de partido ──────────────────────────────────────────────
 
-function MatchRow({ match }: { match: CompetitionMatch }) {
+function MatchRow({ match, onTeamClick }: { match: CompetitionMatch; onTeamClick?: (team: TeamRef) => void }) {
   const live      = isLive(match.status)
   const hasResult = match.home_score != null && match.away_score != null
   const time      = match.match_date
@@ -43,26 +48,43 @@ function MatchRow({ match }: { match: CompetitionMatch }) {
           ? <span className="text-green-400 text-[10px] font-bold uppercase">EN VIVO</span>
           : <span className="text-muted-dark text-[12px] font-semibold">{time}</span>}
       </div>
-      <div className="flex items-center gap-2 min-w-0 justify-end">
+      <button
+        type="button"
+        onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
+        className="flex items-center gap-2 min-w-0 justify-end hover:opacity-70 transition-opacity"
+      >
         <span className="text-text text-sm font-semibold truncate">{match.home_team?.name ?? '—'}</span>
         <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
-      </div>
+      </button>
       <div className="shrink-0 w-14 text-center">
         {hasResult
           ? <span className={`text-sm font-bold tabular-nums ${live ? 'text-green-400' : 'text-text'}`}>{match.home_score} - {match.away_score}</span>
           : <span className="text-muted-dark text-sm font-semibold">vs</span>}
       </div>
-      <div className="flex items-center gap-2 min-w-0">
+      <button
+        type="button"
+        onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
+        className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+      >
         <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
         <span className="text-text text-sm font-semibold truncate">{match.away_team?.name ?? '—'}</span>
-      </div>
+      </button>
     </div>
   )
 }
 
 // ─── Sección por torneo ───────────────────────────────────────────
 
-function TournamentSection({ group }: { group: TournamentTodayMatches }) {
+function TournamentSection({ group, openTeamDetail }: { group: TournamentTodayMatches; openTeamDetail?: (info: TeamDetailInfo) => void }) {
+  function handleTeamClick(team: TeamRef, m: CompetitionMatch) {
+    openTeamDetail?.({
+      team,
+      competitionId:   m.competition_id,
+      seasonYear:      m.season_year,
+      competitionName: group.tournamentName,
+    })
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex items-center gap-2.5 px-4 py-3 bg-elevated/60 border-b border-border/50">
@@ -74,7 +96,9 @@ function TournamentSection({ group }: { group: TournamentTodayMatches }) {
           {group.matches.length} partido{group.matches.length !== 1 ? 's' : ''}
         </span>
       </div>
-      {group.matches.map(m => <MatchRow key={m.id} match={m} />)}
+      {group.matches.map(m => (
+        <MatchRow key={m.id} match={m} onTeamClick={(team) => handleTeamClick(team, m)} />
+      ))}
     </div>
   )
 }
@@ -189,6 +213,7 @@ export default function MatchesPage() {
     = useMatchesForDate(date)
 
   const [filter, setFilter] = useState<'all' | 'live'>('all')
+  const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
 
   const shown = filteredGroups(filter)
 
@@ -287,9 +312,11 @@ export default function MatchesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {shown.map(g => <TournamentSection key={g.tournamentId} group={g} />)}
+          {shown.map(g => <TournamentSection key={g.tournamentId} group={g} openTeamDetail={openTeamDetail} />)}
         </div>
       )}
+
+      {teamDetail && <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />}
     </div>
   )
 }

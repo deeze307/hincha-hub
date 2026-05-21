@@ -1,10 +1,10 @@
 // import NextMatchCard        from '../components/organisms/dashboard/NextMatchCard'
 import MatchesCard          from '../components/organisms/dashboard/MatchesCard'
 import MyTournamentsCard    from '../components/organisms/dashboard/MyTournamentsCard'
-import RecentActivityCard   from '../components/organisms/dashboard/RecentActivityCard'
-import StandingsCard        from '../components/organisms/dashboard/StandingsCard'
-import RecentPredictionsCard from '../components/organisms/dashboard/RecentPredictionsCard'
-import PersonalStatsCard    from '../components/organisms/dashboard/PersonalStatsCard'
+// import RecentActivityCard   from '../components/organisms/dashboard/RecentActivityCard'
+// import StandingsCard        from '../components/organisms/dashboard/StandingsCard'
+// import RecentPredictionsCard from '../components/organisms/dashboard/RecentPredictionsCard'
+// import PersonalStatsCard    from '../components/organisms/dashboard/PersonalStatsCard'
 import { useAuth }          from '../contexts/AuthContext'
 
 export default function HomePage() {
@@ -22,14 +22,14 @@ export default function HomePage() {
         {/* <NextMatchCard /> */}
         <MatchesCard />
         <MyTournamentsCard />
-        <RecentActivityCard />
+        {/* <RecentActivityCard /> */}
       </div>
 
       {/* Fila 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-        <StandingsCard />
-        <RecentPredictionsCard />
-        <PersonalStatsCard />
+        {/* <StandingsCard /> */}
+        {/* <RecentPredictionsCard /> */}
+        {/* <PersonalStatsCard /> */}
       </div>
     </div>
   )

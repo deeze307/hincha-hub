@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { fetchMatchesForDate } from '../../../services/dashboardService'
+import { TeamDetailSheet } from '../TeamDetailSheet'
+import { useTeamDetail } from '../../../hooks/useTeamDetail'
+import type { TeamDetailInfo } from '../../../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../../../services/dashboardService'
 import type { CompetitionMatch } from '../../../services/matchesService'
+
+type TeamRef = { id: string; name: string; logo_url: string | null }
 
 const MAX_PER_COMPETITION = 2
 const MAX_COMPETITIONS    = 2   // 2 × 2 = 4 partidos máximo
@@ -22,7 +27,7 @@ function TeamLogo({ url, name, size = 20 }: { url: string | null; name: string; 
   )
 }
 
-function MatchRow({ match }: { match: CompetitionMatch }) {
+function MatchRow({ match, onTeamClick }: { match: CompetitionMatch; onTeamClick?: (team: TeamRef) => void }) {
   const time = match.match_date
     ? new Date(match.match_date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
     : '—'
@@ -31,19 +36,27 @@ function MatchRow({ match }: { match: CompetitionMatch }) {
   return (
     <div className="grid grid-cols-[2.5rem_1fr_auto_1fr] items-center gap-1.5 px-4 py-2.5 border-b border-border/30 last:border-0">
       <span className="text-[11px] font-semibold text-muted-dark text-center shrink-0">{time}</span>
-      <div className="flex items-center gap-1.5 min-w-0 justify-end">
+      <button
+        type="button"
+        onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
+        className="flex items-center gap-1.5 min-w-0 justify-end hover:opacity-70 transition-opacity"
+      >
         <span className="text-text text-xs font-semibold truncate">{match.home_team?.name ?? '—'}</span>
         <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
-      </div>
+      </button>
       <div className="shrink-0 w-10 text-center">
         {hasResult
           ? <span className="text-text text-xs font-bold tabular-nums">{match.home_score}-{match.away_score}</span>
           : <span className="text-muted-dark text-[11px]">vs</span>}
       </div>
-      <div className="flex items-center gap-1.5 min-w-0">
+      <button
+        type="button"
+        onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
+        className="flex items-center gap-1.5 min-w-0 hover:opacity-70 transition-opacity"
+      >
         <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
         <span className="text-text text-xs font-semibold truncate">{match.away_team?.name ?? '—'}</span>
-      </div>
+      </button>
     </div>
   )
 }
@@ -52,6 +65,7 @@ export default function MatchesCard() {
   const [groups,  setGroups]  = useState<TournamentTodayMatches[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
 
   useEffect(() => {
     fetchMatchesForDate(new Date())
@@ -59,6 +73,15 @@ export default function MatchesCard() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
+
+  function handleTeamClick(team: TeamRef, m: CompetitionMatch, tournamentName: string) {
+    openTeamDetail({
+      team,
+      competitionId:   m.competition_id,
+      seasonYear:      m.season_year,
+      competitionName: tournamentName,
+    } satisfies TeamDetailInfo)
+  }
 
   // Máximo 2 competiciones, 2 partidos c/u
   const limited = groups
@@ -71,7 +94,7 @@ export default function MatchesCard() {
   return (
     <div className="lg:col-span-4 card flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-        <span className="text-muted text-[11px] font-semibold uppercase tracking-widest">Partidos de la fecha</span>
+        <span className="text-muted text-[11px] font-semibold uppercase tracking-widest">Partidos de hoy</span>
         <button
           onClick={() => navigate('/partidos')}
           className="text-brand text-xs font-semibold hover:underline"
@@ -101,7 +124,7 @@ export default function MatchesCard() {
                   {g.tournamentName}
                 </span>
               </div>
-              {g.matches.map(m => <MatchRow key={m.id} match={m} />)}
+              {g.matches.map(m => <MatchRow key={m.id} match={m} onTeamClick={(team) => handleTeamClick(team, m, g.tournamentName)} />)}
             </div>
           ))}
 
@@ -115,6 +138,8 @@ export default function MatchesCard() {
           )}
         </div>
       )}
+
+      {teamDetail && <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />}
     </div>
   )
 }
