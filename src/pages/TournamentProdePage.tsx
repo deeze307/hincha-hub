@@ -541,8 +541,6 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
   const [scorers,          setScorers]          = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
   const [savedKeys,        setSavedKeys]        = useState<Set<string>>(new Set())
   const [bonusIsModified,  setBonusIsModified]  = useState(false)
-  const [saving,           setSaving]           = useState(false)
-  const [saved,            setSaved]            = useState(false)
   const [loading,          setLoading]          = useState(true)
 
   useEffect(() => {
@@ -579,51 +577,43 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
 
   const handleSave = useCallback(async () => {
     if (effectiveLocked) return
-    setSaving(true)
-    try {
-      const bonuses: BonusPrediction[] = []
-      champions.forEach((c, i) => {
-        if (!c) return
-        const key = `champion-${i + 1}`
-        bonuses.push({
-          tournament_id: tournament.id,
-          type:          'champion',
-          rank:          (i + 1) as 1|2|3,
-          team_id:       c.id,
-          team_name:     c.name,
-          is_modified:   savedKeys.has(key),
-        })
+    const bonuses: BonusPrediction[] = []
+    champions.forEach((c, i) => {
+      if (!c) return
+      const key = `champion-${i + 1}`
+      bonuses.push({
+        tournament_id: tournament.id,
+        type:          'champion',
+        rank:          (i + 1) as 1|2|3,
+        team_id:       c.id,
+        team_name:     c.name,
+        is_modified:   savedKeys.has(key),
       })
-      scorers.forEach((s, i) => {
-        if (!s) return
-        const key = `top_scorer-${i + 1}`
-        bonuses.push({
-          tournament_id: tournament.id,
-          type:          'top_scorer',
-          rank:          (i + 1) as 1|2|3,
-          player_id:     s.id,
-          player_name:   s.name,
-          is_modified:   savedKeys.has(key),
-        })
+    })
+    scorers.forEach((s, i) => {
+      if (!s) return
+      const key = `top_scorer-${i + 1}`
+      bonuses.push({
+        tournament_id: tournament.id,
+        type:          'top_scorer',
+        rank:          (i + 1) as 1|2|3,
+        player_id:     s.id,
+        player_name:   s.name,
+        is_modified:   savedKeys.has(key),
       })
-      if (bonuses.length === 0) return
-      await saveBonusPredictions(tournament.id, bonuses)
+    })
+    if (bonuses.length === 0) return
+    await saveBonusPredictions(tournament.id, bonuses)
 
-      const newSavedKeys = new Set(savedKeys)
-      let nowModified = false
-      bonuses.forEach(b => {
-        const key = `${b.type}-${b.rank}`
-        if (b.is_modified) nowModified = true
-        newSavedKeys.add(key)
-      })
-      setSavedKeys(newSavedKeys)
-      if (nowModified) setBonusIsModified(true)
-
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } finally {
-      setSaving(false)
-    }
+    const newSavedKeys = new Set(savedKeys)
+    let nowModified = false
+    bonuses.forEach(b => {
+      const key = `${b.type}-${b.rank}`
+      if (b.is_modified) nowModified = true
+      newSavedKeys.add(key)
+    })
+    setSavedKeys(newSavedKeys)
+    if (nowModified) setBonusIsModified(true)
   }, [effectiveLocked, champions, scorers, savedKeys, tournament.id])
 
   useImperativeHandle(ref, () => ({ save: handleSave, isLocked: effectiveLocked }), [handleSave, effectiveLocked])
