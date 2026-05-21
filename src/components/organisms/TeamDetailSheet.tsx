@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { fetchMatchesByCompetition, groupMatchesByGroup } from '../../services/matchesService'
+import { fetchMatchesByCompetition } from '../../services/matchesService'
 import type { CompetitionMatch } from '../../services/matchesService'
 import type { TeamDetailInfo } from '../../hooks/useTeamDetail'
+
+function groupByRealGroupName(matches: CompetitionMatch[]): Map<string, CompetitionMatch[]> {
+  const map = new Map<string, CompetitionMatch[]>()
+  for (const m of matches.filter(m => m.round_order === 1 && m.group_name != null)) {
+    const key = m.group_name!
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(m)
+  }
+  return map
+}
 
 // ─── Standings con resultados reales ─────────────────────────────
 
@@ -151,7 +161,7 @@ export function TeamDetailSheet({ team, competitionId, seasonYear, competitionNa
       .finally(() => setDataLoading(false))
   }, [competitionId, seasonYear])
 
-  const groupMatchesMap = groupMatchesByGroup(allMatches)
+  const groupMatchesMap = groupByRealGroupName(allMatches)
   const groupEntry = [...groupMatchesMap.entries()].find(([, ms]) =>
     ms.some(m => m.home_team?.id === team.id || m.away_team?.id === team.id)
   )
