@@ -145,13 +145,16 @@ function ScoreBox({
 }: {
   value: string; onChange: (v: string) => void; locked: boolean
 }) {
+  const hasPred = locked && value !== ''
   return (
     <input
       type="number" min={0} max={99}
       value={value}
       onChange={e => onChange(e.target.value)}
       disabled={locked}
-      className="w-10 h-9 text-center text-sm font-semibold text-text bg-elevated border border-border rounded focus:outline-none focus:border-brand disabled:opacity-40 disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      className={`w-10 h-9 text-center text-sm font-semibold bg-elevated border border-border rounded focus:outline-none focus:border-brand disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+        hasPred ? 'text-orange-400/80' : 'text-text disabled:opacity-40'
+      }`}
     />
   )
 }
@@ -181,12 +184,12 @@ function MatchRow({
     : '—'
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-3 border-b border-border/40 last:border-0 ${
+    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${
       isPast ? 'bg-black/20' : isLate ? 'bg-yellow-500/5' : ''
     }`}>
 
-      {/* Equipo local: nombre + logo + resultado real */}
-      <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+      {/* Equipo local */}
+      <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
         <button
           type="button"
           onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
@@ -197,11 +200,6 @@ function MatchRow({
           </span>
           <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
         </button>
-        {hasScore && (
-          <span className="text-muted-dark text-sm font-mono tabular-nums shrink-0 w-4 text-center">
-            {match.home_score}
-          </span>
-        )}
       </div>
 
       {/* Centro: VIVO + inputs + ½ pts */}
@@ -219,13 +217,8 @@ function MatchRow({
         )}
       </div>
 
-      {/* Equipo visitante: resultado real + logo + nombre */}
-      <div className="flex-1 flex items-center gap-1.5 min-w-0">
-        {hasScore && (
-          <span className="text-muted-dark text-sm font-mono tabular-nums shrink-0 w-4 text-center">
-            {match.away_score}
-          </span>
-        )}
+      {/* Equipo visitante */}
+      <div className="flex-1 flex items-center gap-2 min-w-0">
         <button
           type="button"
           onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
@@ -238,18 +231,25 @@ function MatchRow({
         </button>
       </div>
 
-      {/* Pts ganados / fecha */}
-      <div className="shrink-0 w-10 text-right">
-        {displayPts != null ? (
-          <span className={`text-[11px] font-bold ${
-            displayPts >= 8 ? 'text-green-400' :
-            displayPts >= 3 ? 'text-yellow-400' :
-            displayPts >  0 ? 'text-orange-400' :
-            'text-red-400'
-          }`}>+{displayPts}</span>
-        ) : !hasScore ? (
-          <span className="text-muted-dark text-[11px]">{dateStr}</span>
-        ) : null}
+      {/* Resultado real + pts / fecha */}
+      <div className="shrink-0 w-20 text-right">
+        {hasScore ? (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className={`text-xs font-mono font-semibold ${live ? 'text-red-400' : 'text-muted-dark'}`}>
+              {match.home_score} - {match.away_score}
+            </span>
+            {displayPts != null && (
+              <span className={`text-[11px] font-bold ${
+                displayPts >= 8 ? 'text-green-400' :
+                displayPts >= 3 ? 'text-yellow-400' :
+                displayPts >  0 ? 'text-orange-400' :
+                'text-red-400'
+              }`}>+{displayPts}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-dark text-[11px] leading-tight">{dateStr}</span>
+        )}
       </div>
     </div>
   )
@@ -1126,11 +1126,11 @@ function ProdeRankingTab({
   return (
     <div className="card overflow-hidden">
       {/* Header */}
-      <div className="grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-2.5 border-b border-border bg-elevated/60">
+      <div className="grid grid-cols-[2rem_1fr_3.5rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem] gap-2 px-4 py-2.5 border-b border-border bg-elevated/60">
         <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">#</span>
         <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">Jugador</span>
-        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Partidos</span>
-        <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Bonus</span>
+        <span className="hidden sm:block text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Partidos</span>
+        <span className="hidden sm:block text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Bonus</span>
         <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Total</span>
       </div>
 
@@ -1143,7 +1143,7 @@ function ProdeRankingTab({
           <div
             key={entry.userId}
             className={[
-              'grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-3 items-center',
+              'grid grid-cols-[2rem_1fr_3.5rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem] gap-2 px-4 py-3 items-center',
               idx < entries.length - 1 ? 'border-b border-border/50' : '',
               isMe ? 'bg-brand/5' : '',
             ].join(' ')}
@@ -1151,18 +1151,21 @@ function ProdeRankingTab({
             <span className={`text-sm font-bold leading-none ${isMe ? 'text-brand' : 'text-muted'}`}>
               {rankLabel}
             </span>
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <RankingAvatar url={entry.avatarUrl} name={entry.displayName} />
               <div className="min-w-0">
                 <p className={`text-sm font-medium truncate leading-tight ${isMe ? 'text-brand' : 'text-text'}`}>
                   {entry.displayName}
                   {isMe && <span className="text-[10px] ml-1 opacity-60">(vos)</span>}
                 </p>
-                <p className="text-muted text-[10px] mt-0.5">{entry.matchesScored} resultados</p>
+                <p className="text-muted-dark text-[10px] mt-0.5">
+                  {entry.matchesScored} result.
+                  <span className="sm:hidden"> · {entry.matchPts}+{entry.bonusPts} pts</span>
+                </p>
               </div>
             </div>
-            <span className="text-text text-sm font-semibold text-right">{entry.matchPts}</span>
-            <span className="text-text text-sm font-semibold text-right">{entry.bonusPts}</span>
+            <span className="hidden sm:block text-text text-sm font-semibold text-right">{entry.matchPts}</span>
+            <span className="hidden sm:block text-text text-sm font-semibold text-right">{entry.bonusPts}</span>
             <span className={`text-sm font-bold text-right ${isMe ? 'text-brand' : 'text-text'}`}>
               {entry.totalPts}
             </span>
