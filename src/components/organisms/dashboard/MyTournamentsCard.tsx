@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchMyTournamentPositions } from '../../../services/rankingService'
 import type { MyTournamentPosition } from '../../../services/rankingService'
 
 function medalFor(rank: number | null): string {
@@ -10,16 +8,13 @@ function medalFor(rank: number | null): string {
   return ''
 }
 
-export default function MyTournamentsCard() {
+export default function MyTournamentsCard({
+  positions, loading,
+}: {
+  positions: MyTournamentPosition[]
+  loading:   boolean
+}) {
   const navigate = useNavigate()
-  const [positions, setPositions] = useState<MyTournamentPosition[]>([])
-  const [loading, setLoading]     = useState(true)
-
-  useEffect(() => {
-    fetchMyTournamentPositions(5)
-      .then(setPositions)
-      .finally(() => setLoading(false))
-  }, [])
 
   return (
     <div className="lg:col-span-4 card p-5 flex flex-col gap-4">

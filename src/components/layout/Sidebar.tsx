@@ -5,10 +5,10 @@ import { useAuth } from '../../contexts/AuthContext'
 import logoFull from '../../assets/images/logo2_transparente.png'
 
 const NAV = [
-  { to: '/',             icon: Home,       label: 'Inicio',         adminOnly: false },
-  { to: '/torneos',      icon: Trophy,     label: 'Torneos',        adminOnly: false },
-  { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas',   adminOnly: false },
-  { to: '/configuracion',icon: Settings,   label: 'Configuración',  adminOnly: true  },
+  { to: '/',             icon: Home,       label: 'Inicio',        adminOnly: false, comingSoon: false },
+  { to: '/torneos',      icon: Trophy,     label: 'Torneos',       adminOnly: false, comingSoon: false },
+  { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas',  adminOnly: false, comingSoon: true  },
+  { to: '/configuracion',icon: Settings,   label: 'Configuración', adminOnly: true,  comingSoon: false },
 ]
 
 function NavItems({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
@@ -18,7 +18,23 @@ function NavItems({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
 
   return (
     <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
-      {visibleNav.map(({ to, icon: Icon, label }) => (
+      {visibleNav.map(({ to, icon: Icon, label, comingSoon }) => comingSoon ? (
+        <div
+          key={to}
+          title={collapsed ? label : undefined}
+          className="flex items-center gap-3 px-2.5 py-2.5 rounded-lg text-[13px] font-medium text-muted/40 whitespace-nowrap cursor-default"
+        >
+          <Icon size={17} strokeWidth={1.8} className="shrink-0" />
+          {!collapsed && (
+            <span className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="truncate">{label}</span>
+              <span className="text-[9px] font-semibold bg-elevated border border-border text-muted-dark px-1.5 py-px rounded-full leading-none shrink-0">
+                pronto
+              </span>
+            </span>
+          )}
+        </div>
+      ) : (
         <NavLink
           key={to}
           to={to}
