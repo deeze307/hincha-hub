@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ImagePlus, X, ChevronDown, Loader2, Search, Flag, Shield } from 'lucide-react'
+import { ImagePlus, X, ChevronDown, Loader2, Search, Flag, Shield, Trophy, Star, Target, Award } from 'lucide-react'
 import { fetchUpcomingCompetitions } from '../services/competitionsService'
 import {
   createTournament, updateTournament, fetchTournaments,
-  DEFAULT_PRODE_CONFIG,
+  DEFAULT_PRODE_CONFIG, ALL_BONUS_TYPES, BONUS_TYPE_LABELS,
 } from '../services/tournamentsService'
 import type { Competition } from '../services/competitionsService'
-import type { Tournament, ProdeConfig } from '../services/tournamentsService'
+import type { Tournament, ProdeConfig, BonusType } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+
+const BONUS_FORM_ICONS: Record<BonusType, React.FC<{ size?: number; className?: string }>> = {
+  champion:        Trophy,
+  top_scorer:      Star,
+  top_assists:     Target,
+  mvp:             Award,
+  best_goalkeeper: Shield,
+}
 
 interface FormState {
   name:                string
@@ -25,9 +33,10 @@ interface FormState {
   team_type:           'national' | 'club'
   direct_qualifiers:   string
   best_third_count:    string
-  has_knockout: boolean
-  has_bonus:    boolean
-  is_hidden:    boolean
+  has_knockout:  boolean
+  has_bonus:     boolean
+  bonus_types:   BonusType[]
+  is_hidden:     boolean
 }
 
 const INITIAL: FormState = {
@@ -38,9 +47,10 @@ const INITIAL: FormState = {
   team_type: 'national',
   direct_qualifiers: '2',
   best_third_count: '0',
-  has_knockout: true,
-  has_bonus:    true,
-  is_hidden:    false,
+  has_knockout:  true,
+  has_bonus:     true,
+  bonus_types:   ['champion', 'top_scorer'] as BonusType[],
+  is_hidden:     false,
 }
 
 export default function TournamentFormPage() {
@@ -95,7 +105,8 @@ export default function TournamentFormPage() {
       best_third_count:    String(pc.best_third_count ?? 0),
       has_knockout:        pc.has_knockout ?? true,
       has_bonus:           pc.has_bonus ?? true,
-      is_hidden: t.is_hidden ?? false,
+      bonus_types:         pc.bonus_types ?? ['champion', 'top_scorer'],
+      is_hidden:           t.is_hidden ?? false,
     })
   }
 
@@ -149,6 +160,7 @@ export default function TournamentFormPage() {
       best_third_count:  parseInt(form.best_third_count) || 0,
       has_knockout:      form.has_knockout,
       has_bonus:         form.has_bonus,
+      bonus_types:       form.has_bonus ? form.bonus_types : [],
       tiebreakers:       ['points', 'gd', 'gf', 'h2h'],
     }
 
@@ -479,10 +491,50 @@ export default function TournamentFormPage() {
                 />
                 <ToggleRow
                   label="Incluir predicciones bonus"
-                  description="Campeón del torneo y goleador (puntos extra)"
+                  description="Premios del torneo: campeón, goleador, MVP, etc."
                   value={form.has_bonus}
                   onChange={v => set({ has_bonus: v })}
                 />
+                {form.has_bonus && (
+                  <div className="ml-0 mt-1 p-4 bg-elevated/40 rounded-xl border border-border/60 space-y-3">
+                    <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">
+                      Premios habilitados
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {ALL_BONUS_TYPES.map(bt => {
+                        const Icon     = BONUS_FORM_ICONS[bt]
+                        const selected = form.bonus_types.includes(bt)
+                        return (
+                          <button
+                            key={bt}
+                            type="button"
+                            onClick={() => {
+                              const next = selected
+                                ? form.bonus_types.filter(x => x !== bt)
+                                : [...form.bonus_types, bt]
+                              set({ bonus_types: next })
+                            }}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 transition-all text-left ${
+                              selected
+                                ? 'border-brand bg-brand/10'
+                                : 'border-border hover:border-muted'
+                            }`}
+                          >
+                            <Icon size={14} className={selected ? 'text-brand' : 'text-muted'} />
+                            <span className={`text-sm font-medium flex-1 ${selected ? 'text-text' : 'text-muted'}`}>
+                              {BONUS_TYPE_LABELS[bt]}
+                            </span>
+                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                              selected ? 'border-brand bg-brand' : 'border-border'
+                            }`}>
+                              {selected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
             </div>

@@ -2,8 +2,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
+import type { BonusType } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
 import {
   fetchUserPredictions, saveMatchPredictions,
@@ -545,36 +546,57 @@ const RANK_META = [
   { rank: 3 as const, label: '3ª opción', pts: 3,  medal: '🥉' },
 ]
 
+const BONUS_META: Record<BonusType, {
+  label: string
+  Icon:  React.FC<{ size?: number; className?: string }>
+  kind:  'team' | 'player'
+}> = {
+  champion:        { label: 'Campeón del Torneo',   Icon: Trophy, kind: 'team'   },
+  top_scorer:      { label: 'Goleador del Torneo',  Icon: Star,   kind: 'player' },
+  top_assists:     { label: 'Asistidor del Torneo', Icon: Target, kind: 'player' },
+  mvp:             { label: 'MVP del Torneo',        Icon: Award,  kind: 'player' },
+  best_goalkeeper: { label: 'Mejor Arquero',         Icon: Shield, kind: 'player' },
+}
+
 interface BonusTabHandle { save: () => Promise<void>; isLocked: boolean }
 
 const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: boolean }>(
 ({ tournament, locked }, ref) => {
-  const [champions,        setChampions]        = useState<[SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]>([null, null, null])
-  const [scorers,          setScorers]          = useState<[SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]>([null, null, null])
-  const [savedKeys,        setSavedKeys]        = useState<Set<string>>(new Set())
-  const [bonusIsModified,  setBonusIsModified]  = useState(false)
-  const [loading,          setLoading]          = useState(true)
+  // Bonus types configurados; backwards-compatible con torneos sin bonus_types
+  const bonusTypes: BonusType[] = tournament.prode_config?.bonus_types?.length
+    ? tournament.prode_config.bonus_types
+    : ['champion', 'top_scorer']
+
+  // teamPicks y playerPicks: clave = "type-rank"
+  const [teamPicks,       setTeamPicks]       = useState<Record<string, SelectedTeam   | null>>({})
+  const [playerPicks,     setPlayerPicks]     = useState<Record<string, SelectedPlayer | null>>({})
+  const [savedKeys,       setSavedKeys]       = useState<Set<string>>(new Set())
+  const [bonusIsModified, setBonusIsModified] = useState(false)
+  const [loading,         setLoading]         = useState(true)
 
   useEffect(() => {
     async function load() {
       try {
         const bonuses = await fetchUserBonusPredictions(tournament.id)
-        const newChamps: [SelectedTeam|null, SelectedTeam|null, SelectedTeam|null]         = [null, null, null]
-        const newScores: [SelectedPlayer|null, SelectedPlayer|null, SelectedPlayer|null]   = [null, null, null]
+        const newTeams:   Record<string, SelectedTeam   | null> = {}
+        const newPlayers: Record<string, SelectedPlayer | null> = {}
         const keys = new Set<string>()
         let anyModified = false
+
         for (const b of bonuses) {
-          keys.add(`${b.type}-${b.rank}`)
+          const key  = `${b.type}-${b.rank}`
+          const meta = BONUS_META[b.type as BonusType]
+          keys.add(key)
           if (b.is_modified) anyModified = true
-          if (b.type === 'champion' && b.rank >= 1 && b.rank <= 3 && b.team_name) {
-            newChamps[b.rank - 1] = { id: b.team_id!, name: b.team_name, logo_url: null }
-          }
-          if (b.type === 'top_scorer' && b.rank >= 1 && b.rank <= 3 && b.player_name) {
-            newScores[b.rank - 1] = { id: b.player_id!, name: b.player_name, photo_url: null, team: null }
+          if (meta?.kind === 'team' && b.team_name) {
+            newTeams[key] = { id: b.team_id!, name: b.team_name, logo_url: null }
+          } else if (meta?.kind === 'player' && b.player_name) {
+            newPlayers[key] = { id: b.player_id!, name: b.player_name, photo_url: null, team: null }
           }
         }
-        setChampions(newChamps)
-        setScorers(newScores)
+
+        setTeamPicks(newTeams)
+        setPlayerPicks(newPlayers)
         setSavedKeys(keys)
         setBonusIsModified(anyModified)
       } finally {
@@ -584,36 +606,42 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
     load()
   }, [tournament.id])
 
-  // Effective lock: time-locked by parent OR already used their one modification
   const effectiveLocked = locked || bonusIsModified
 
   const handleSave = useCallback(async () => {
     if (effectiveLocked) return
     const bonuses: BonusPrediction[] = []
-    champions.forEach((c, i) => {
-      if (!c) return
-      const key = `champion-${i + 1}`
-      bonuses.push({
-        tournament_id: tournament.id,
-        type:          'champion',
-        rank:          (i + 1) as 1|2|3,
-        team_id:       c.id,
-        team_name:     c.name,
-        is_modified:   savedKeys.has(key),
-      })
-    })
-    scorers.forEach((s, i) => {
-      if (!s) return
-      const key = `top_scorer-${i + 1}`
-      bonuses.push({
-        tournament_id: tournament.id,
-        type:          'top_scorer',
-        rank:          (i + 1) as 1|2|3,
-        player_id:     s.id,
-        player_name:   s.name,
-        is_modified:   savedKeys.has(key),
-      })
-    })
+
+    for (const bonusType of bonusTypes) {
+      const meta = BONUS_META[bonusType]
+      for (const { rank } of RANK_META) {
+        const key = `${bonusType}-${rank}`
+        if (meta.kind === 'team') {
+          const t = teamPicks[key]
+          if (!t) continue
+          bonuses.push({
+            tournament_id: tournament.id,
+            type:          bonusType,
+            rank,
+            team_id:       t.id,
+            team_name:     t.name,
+            is_modified:   savedKeys.has(key),
+          })
+        } else {
+          const p = playerPicks[key]
+          if (!p) continue
+          bonuses.push({
+            tournament_id: tournament.id,
+            type:          bonusType,
+            rank,
+            player_id:     p.id,
+            player_name:   p.name,
+            is_modified:   savedKeys.has(key),
+          })
+        }
+      }
+    }
+
     if (bonuses.length === 0) return
     await saveBonusPredictions(tournament.id, bonuses)
 
@@ -626,7 +654,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
     })
     setSavedKeys(newSavedKeys)
     if (nowModified) setBonusIsModified(true)
-  }, [effectiveLocked, champions, scorers, savedKeys, tournament.id])
+  }, [effectiveLocked, teamPicks, playerPicks, savedKeys, tournament.id, bonusTypes])
 
   useImperativeHandle(ref, () => ({ save: handleSave, isLocked: effectiveLocked }), [handleSave, effectiveLocked])
 
@@ -644,12 +672,11 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
       {/* Descripción */}
       <div className="bg-brand/10 border border-brand/25 rounded-xl px-4 py-3">
         <p className="text-sm text-text">
-          Elegí hasta <span className="font-semibold text-brand">3 opciones</span> para el campeón y el goleador del torneo.
+          Elegí hasta <span className="font-semibold text-brand">3 opciones</span> por cada premio.
           Si acertás con tu <span className="font-semibold">1ª opción</span> sumás <span className="font-semibold">10 pts</span>, con la <span className="font-semibold">2ª</span> sumás <span className="font-semibold">5 pts</span> y con la <span className="font-semibold">3ª</span> sumás <span className="font-semibold">3 pts</span>.
         </p>
       </div>
 
-      {/* Estado modificado */}
       {bonusIsModified && (
         <div className="flex items-center gap-2 text-muted text-sm bg-elevated border border-border rounded-xl px-4 py-3">
           <Lock size={14} className="shrink-0" />
@@ -657,77 +684,58 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
         </div>
       )}
 
-      {/* Campeón */}
-      <div className="card">
-        <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
-          <Trophy size={16} className="text-brand" />
-          <h3 className="text-text text-sm font-semibold">Campeón del Torneo</h3>
-          <span className="text-muted text-xs ml-auto hidden sm:block">si acertás con tu opción</span>
-        </div>
-        <div className="p-3 space-y-2.5">
-          {RANK_META.map(({ rank, label, pts, medal }) => (
-            <div key={rank} className="flex items-center gap-2">
-              <div className="w-20 shrink-0 flex items-center gap-1.5">
-                <span className="text-lg leading-none">{medal}</span>
-                <div>
-                  <p className="text-text text-xs font-semibold">{label}</p>
-                  <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
-                </div>
-              </div>
-              <div className="flex-1">
-                <AutocompleteTeam
-                  value={champions[rank - 1]}
-                  onSelect={t => setChampions(prev => {
-                    const next = [...prev] as typeof prev
-                    next[rank - 1] = t
-                    return next
-                  })}
-                  locked={effectiveLocked}
-                  teamType={tournament.team_type}
-                  placeholder="Buscar equipo..."
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {bonusTypes.map(bonusType => {
+        const meta = BONUS_META[bonusType]
+        if (!meta) return null
+        const needsCompetition = meta.kind === 'player' && !tournament.competition_id
+        if (needsCompetition) return null
+        const { Icon } = meta
 
-      {/* Goleador */}
-      {tournament.competition_id && (
-        <div className="card">
-          <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
-            <Star size={16} className="text-brand" />
-            <h3 className="text-text text-sm font-semibold">Goleador del Torneo</h3>
-            <span className="text-muted text-xs ml-auto hidden sm:block">si acertás con tu opción</span>
-          </div>
-          <div className="p-3 space-y-2.5">
-            {RANK_META.map(({ rank, label, pts, medal }) => (
-              <div key={rank} className="flex items-center gap-2">
-                <div className="w-20 shrink-0 flex items-center gap-1.5">
-                  <span className="text-lg leading-none">{medal}</span>
-                  <div>
-                    <p className="text-text text-xs font-semibold">{label}</p>
-                    <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
+        return (
+          <div key={bonusType} className="card">
+            <div className="px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px] flex items-center gap-2">
+              <Icon size={16} className="text-brand" />
+              <h3 className="text-text text-sm font-semibold">{meta.label}</h3>
+              <span className="text-muted text-xs ml-auto hidden sm:block">si acertás con tu opción</span>
+            </div>
+            <div className="p-3 space-y-2.5">
+              {RANK_META.map(({ rank, label, pts, medal }) => {
+                const key = `${bonusType}-${rank}`
+                return (
+                  <div key={rank} className="flex items-center gap-2">
+                    <div className="w-20 shrink-0 flex items-center gap-1.5">
+                      <span className="text-lg leading-none">{medal}</span>
+                      <div>
+                        <p className="text-text text-xs font-semibold">{label}</p>
+                        <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      {meta.kind === 'team' ? (
+                        <AutocompleteTeam
+                          value={teamPicks[key] ?? null}
+                          onSelect={t => setTeamPicks(prev => ({ ...prev, [key]: t }))}
+                          locked={effectiveLocked}
+                          teamType={tournament.team_type}
+                          placeholder="Buscar equipo..."
+                        />
+                      ) : (
+                        <AutocompletePlayer
+                          value={playerPicks[key] ?? null}
+                          onSelect={p => setPlayerPicks(prev => ({ ...prev, [key]: p }))}
+                          locked={effectiveLocked}
+                          competitionId={tournament.competition_id!}
+                          placeholder="Buscar jugador..."
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1">
-                  <AutocompletePlayer
-                    value={scorers[rank - 1]}
-                    onSelect={p => setScorers(prev => {
-                      const next = [...prev] as typeof prev
-                      next[rank - 1] = p
-                      return next
-                    })}
-                    locked={effectiveLocked}
-                    competitionId={tournament.competition_id!}
-                    placeholder="Buscar jugador..."
-                  />
-                </div>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })}
 
     </div>
   )

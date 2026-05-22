@@ -82,7 +82,7 @@ export async function saveMatchPredictions(
 export interface BonusPrediction {
   id?:            string
   tournament_id:  string
-  type:           'champion' | 'top_scorer'
+  type:           'champion' | 'top_scorer' | 'top_assists' | 'mvp' | 'best_goalkeeper'
   rank:           1 | 2 | 3
   team_id?:       string | null
   player_id?:     string | null

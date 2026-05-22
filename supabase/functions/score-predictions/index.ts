@@ -144,8 +144,73 @@ Deno.serve(async () => {
       breakdown[k] = (breakdown[k] ?? 0) + 1
     })
 
+    // ── Bonus predictions scoring ──────────────────────────────────────────
+    // Points per rank: rank1=10, rank2=5, rank3=3
+    const BONUS_RANK_PTS: Record<number, number> = { 1: 10, 2: 5, 3: 3 }
+
+    const { data: awardResults, error: arErr } = await supabase
+      .from('award_results')
+      .select('tournament_id, award_type, team_id, player_id')
+
+    if (arErr) throw arErr
+
+    let bonusUpdated = 0
+
+    if (awardResults?.length) {
+      // Fetch all bonus_predictions for tournaments that have award results
+      const tournamentIds = [...new Set(awardResults.map((a: any) => a.tournament_id))]
+
+      const { data: bonusPreds, error: bpErr } = await supabase
+        .from('bonus_predictions')
+        .select('id, user_id, tournament_id, type, rank, team_id, player_id')
+        .in('tournament_id', tournamentIds)
+
+      if (bpErr) throw bpErr
+
+      if (bonusPreds?.length) {
+        // Build a lookup: "tournamentId:awardType" → { team_id, player_id }
+        const awardMap = new Map<string, { team_id: string | null; player_id: string | null }>()
+        for (const a of awardResults) {
+          awardMap.set(`${a.tournament_id}:${a.award_type}`, {
+            team_id:   a.team_id,
+            player_id: a.player_id,
+          })
+        }
+
+        const bonusRows = bonusPreds.map((bp: any) => {
+          const award = awardMap.get(`${bp.tournament_id}:${bp.type}`)
+          let pts = 0
+          if (award) {
+            const teamMatch   = award.team_id   && bp.team_id   && award.team_id   === bp.team_id
+            const playerMatch = award.player_id && bp.player_id && award.player_id === bp.player_id
+            if (teamMatch || playerMatch) {
+              pts = BONUS_RANK_PTS[bp.rank] ?? 0
+            }
+          }
+          return {
+            id:            bp.id,
+            user_id:       bp.user_id,
+            tournament_id: bp.tournament_id,
+            type:          bp.type,
+            rank:          bp.rank,
+            team_id:       bp.team_id,
+            player_id:     bp.player_id,
+            points_earned: pts,
+            updated_at:    new Date().toISOString(),
+          }
+        })
+
+        const { error: buErr } = await supabase
+          .from('bonus_predictions')
+          .upsert(bonusRows, { onConflict: 'id' })
+
+        if (buErr) throw buErr
+        bonusUpdated = bonusRows.length
+      }
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, updated: rows.length, breakdown }),
+      JSON.stringify({ ok: true, updated: rows.length, bonusUpdated, breakdown }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (err) {

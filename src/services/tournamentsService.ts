@@ -1,12 +1,27 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 
+export type BonusType = 'champion' | 'top_scorer' | 'top_assists' | 'mvp' | 'best_goalkeeper'
+
+export const ALL_BONUS_TYPES: BonusType[] = [
+  'champion', 'top_scorer', 'top_assists', 'mvp', 'best_goalkeeper',
+]
+
+export const BONUS_TYPE_LABELS: Record<BonusType, string> = {
+  champion:        'Campeón del Torneo',
+  top_scorer:      'Goleador del Torneo',
+  top_assists:     'Asistidor del Torneo',
+  mvp:             'MVP del Torneo',
+  best_goalkeeper: 'Mejor Arquero',
+}
+
 export interface ProdeConfig {
-  direct_qualifiers: number   // equipos que clasifican directamente por grupo
-  best_third_count:  number   // mejores 3eros que también clasifican (0 = ninguno)
+  direct_qualifiers: number
+  best_third_count:  number
   has_knockout:      boolean
   has_bonus:         boolean
-  tiebreakers:       string[] // ['points','gd','gf','h2h']
+  bonus_types:       BonusType[]
+  tiebreakers:       string[]
 }
 
 export const DEFAULT_PRODE_CONFIG: ProdeConfig = {
@@ -14,6 +29,7 @@ export const DEFAULT_PRODE_CONFIG: ProdeConfig = {
   best_third_count:  0,
   has_knockout:      true,
   has_bonus:         true,
+  bonus_types:       ['champion', 'top_scorer'],
   tiebreakers:       ['points', 'gd', 'gf', 'h2h'],
 }
 
