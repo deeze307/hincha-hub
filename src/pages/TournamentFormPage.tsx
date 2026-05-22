@@ -168,11 +168,19 @@ export default function TournamentFormPage() {
     try {
       if (isEdit && id) {
         await updateTournament(id, {
-          name:        form.name,
-          description: form.description,
-          image_file:  form.image_file,
-          image_url:   form.image_url,
-          is_hidden:   isSuperAdmin ? form.is_hidden : undefined,
+          name:         form.name,
+          description:  form.description,
+          image_file:   form.image_file,
+          image_url:    form.image_url,
+          is_hidden:    isSuperAdmin ? form.is_hidden : undefined,
+          prode_config: {
+            direct_qualifiers: parseInt(form.direct_qualifiers),
+            best_third_count:  parseInt(form.best_third_count) || 0,
+            has_knockout:      form.has_knockout,
+            has_bonus:         form.has_bonus,
+            bonus_types:       form.has_bonus ? form.bonus_types : [],
+            tiebreakers:       ['points', 'gd', 'gf', 'h2h'],
+          },
         })
       } else {
         await createTournament({
@@ -489,57 +497,69 @@ export default function TournamentFormPage() {
                   value={form.has_knockout}
                   onChange={v => set({ has_knockout: v })}
                 />
-                <ToggleRow
-                  label="Incluir predicciones bonus"
-                  description="Premios del torneo: campeón, goleador, MVP, etc."
-                  value={form.has_bonus}
-                  onChange={v => set({ has_bonus: v })}
-                />
-                {form.has_bonus && (
-                  <div className="ml-0 mt-1 p-4 bg-elevated/40 rounded-xl border border-border/60 space-y-3">
-                    <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">
-                      Premios habilitados
-                    </p>
-                    <div className="grid grid-cols-1 gap-2">
-                      {ALL_BONUS_TYPES.map(bt => {
-                        const Icon     = BONUS_FORM_ICONS[bt]
-                        const selected = form.bonus_types.includes(bt)
-                        return (
-                          <button
-                            key={bt}
-                            type="button"
-                            onClick={() => {
-                              const next = selected
-                                ? form.bonus_types.filter(x => x !== bt)
-                                : [...form.bonus_types, bt]
-                              set({ bonus_types: next })
-                            }}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 transition-all text-left ${
-                              selected
-                                ? 'border-brand bg-brand/10'
-                                : 'border-border hover:border-muted'
-                            }`}
-                          >
-                            <Icon size={14} className={selected ? 'text-brand' : 'text-muted'} />
-                            <span className={`text-sm font-medium flex-1 ${selected ? 'text-text' : 'text-muted'}`}>
-                              {BONUS_TYPE_LABELS[bt]}
-                            </span>
-                            <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                              selected ? 'border-brand bg-brand' : 'border-border'
-                            }`}>
-                              {selected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
 
             </div>
           </div>
         )}
+
+        {/* ── Predicciones bonus (siempre editable) ── */}
+        <div className="border border-border rounded-xl overflow-hidden">
+          <div className="bg-elevated px-5 py-3 border-b border-border">
+            <h2 className="text-text text-sm font-semibold">Predicciones bonus</h2>
+            <p className="text-muted-dark text-xs mt-0.5">
+              Podés agregar o quitar tipos de bonus en cualquier momento
+            </p>
+          </div>
+          <div className="p-5 space-y-3">
+            <ToggleRow
+              label="Incluir predicciones bonus"
+              description="Premios del torneo: campeón, goleador, MVP, etc."
+              value={form.has_bonus}
+              onChange={v => set({ has_bonus: v })}
+            />
+            {form.has_bonus && (
+              <div className="mt-1 p-4 bg-elevated/40 rounded-xl border border-border/60 space-y-3">
+                <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">
+                  Premios habilitados
+                </p>
+                <div className="grid grid-cols-1 gap-2">
+                  {ALL_BONUS_TYPES.map(bt => {
+                    const Icon     = BONUS_FORM_ICONS[bt]
+                    const selected = form.bonus_types.includes(bt)
+                    return (
+                      <button
+                        key={bt}
+                        type="button"
+                        onClick={() => {
+                          const next = selected
+                            ? form.bonus_types.filter(x => x !== bt)
+                            : [...form.bonus_types, bt]
+                          set({ bonus_types: next })
+                        }}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border-2 transition-all text-left ${
+                          selected
+                            ? 'border-brand bg-brand/10'
+                            : 'border-border hover:border-muted'
+                        }`}
+                      >
+                        <Icon size={14} className={selected ? 'text-brand' : 'text-muted'} />
+                        <span className={`text-sm font-medium flex-1 ${selected ? 'text-text' : 'text-muted'}`}>
+                          {BONUS_TYPE_LABELS[bt]}
+                        </span>
+                        <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                          selected ? 'border-brand bg-brand' : 'border-border'
+                        }`}>
+                          {selected && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ── Visibilidad (solo superadmin en edición) ── */}
         {isEdit && isSuperAdmin && (

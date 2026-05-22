@@ -69,11 +69,12 @@ export interface CreateTournamentData {
 }
 
 export interface UpdateTournamentData {
-  name:        string
-  description: string
-  image_file:  File | null
-  image_url:   string | null
-  is_hidden?:  boolean
+  name:         string
+  description:  string
+  image_file:   File | null
+  image_url:    string | null
+  is_hidden?:   boolean
+  prode_config?: ProdeConfig
 }
 
 export async function fetchTournaments(): Promise<Tournament[]> {
@@ -206,7 +207,8 @@ export async function updateTournament(id: string, data: UpdateTournamentData): 
     image_url,
     updated_at:  new Date().toISOString(),
   }
-  if (data.is_hidden !== undefined) patch.is_hidden = data.is_hidden
+  if (data.is_hidden    !== undefined) patch.is_hidden    = data.is_hidden
+  if (data.prode_config !== undefined) patch.prode_config = data.prode_config
 
   const { error } = await supabase
     .from('tournaments')
