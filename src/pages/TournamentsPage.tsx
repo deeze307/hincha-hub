@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock, Trophy } from 'lucide-react'
+import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock } from 'lucide-react'
 import { fetchTournaments, joinTournament, requestJoinTournament } from '../services/tournamentsService'
 import type { Tournament } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
@@ -137,7 +137,6 @@ export default function TournamentsPage() {
               joining={joining === t.id}
               onJoin={() => handleJoin(t)}
               onManage={() => navigate(`/torneos/${t.id}/editar`)}
-              onAwards={() => navigate(`/torneos/${t.id}/premios`)}
               onProde={() => navigate(`/torneos/${t.id}/prode`)}
             />
           ))}
@@ -154,14 +153,12 @@ interface CardProps {
   joining:       boolean
   onJoin:        () => void
   onManage:      () => void
-  onAwards:      () => void
   onProde:       () => void
 }
 
-function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, onJoin, onManage, onAwards, onProde }: CardProps) {
-  const isOwner      = t.created_by === currentUserId
-  const canManage    = isOwner || isSuperAdmin
-  const hasBonuses   = canManage && !!(t.prode_config?.has_bonus && t.prode_config?.bonus_types?.length)
+function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, onJoin, onManage, onProde }: CardProps) {
+  const isOwner   = t.created_by === currentUserId
+  const canManage = isOwner || isSuperAdmin
   const participantN = typeof t.participant_count === 'number' ? t.participant_count : 0
   const isFull       = t.max_participants != null && participantN >= t.max_participants
 
@@ -212,20 +209,9 @@ function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, o
             </span>
           </div>
           {canManage && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button onClick={onManage} className="btn-secondary text-[11px] py-1 px-2.5">
-                Editar
-              </button>
-              {hasBonuses && (
-                <button
-                  onClick={onAwards}
-                  className="btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1"
-                  title="Cargar premios del torneo"
-                >
-                  <Trophy size={11} /> Premios
-                </button>
-              )}
-            </div>
+            <button onClick={onManage} className="btn-secondary text-[11px] py-1 px-2.5 shrink-0">
+              Editar
+            </button>
           )}
         </div>
 

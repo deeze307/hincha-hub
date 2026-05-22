@@ -4,6 +4,7 @@ import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
 import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
+import { useAuth } from '../contexts/AuthContext'
 import type { BonusType } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
 import {
@@ -28,6 +29,7 @@ interface ScoreInput {
   pts:          number | null  // points_earned from DB after scoring
   is_modified:  boolean        // true = permanently locked (used their one edit)
   exists_in_db: boolean        // false = never saved yet
+  predicted_at: string | null  // ISO timestamp of the prediction
 }
 
 type PredMap = Map<string, ScoreInput>  // match_id → scores
@@ -163,6 +165,15 @@ function ScoreBox({
 
 type TeamRef = { id: string; name: string; logo_url: string | null }
 
+function formatPredTime(iso: string): string {
+  const d  = new Date(iso)
+  const hh = d.getHours().toString().padStart(2, '0')
+  const mm = d.getMinutes().toString().padStart(2, '0')
+  const dd = d.getDate().toString().padStart(2, '0')
+  const mo = (d.getMonth() + 1).toString().padStart(2, '0')
+  return `${hh}:${mm} ${dd}/${mo}`
+}
+
 function MatchRow({
   match, pred, onChange, onTeamClick,
 }: {
@@ -177,6 +188,12 @@ function MatchRow({
   const hasScore = match.home_score != null && match.away_score != null
   const isPast   = hasScore || (match.match_date != null && new Date(match.match_date) < new Date())
 
+  const predTimeColor = (() => {
+    if (!pred.predicted_at || !match.match_date) return null
+    const delta = new Date(match.match_date).getTime() - new Date(pred.predicted_at).getTime()
+    return delta >= LATE_HOURS * 3_600_000 ? 'text-green-400' : 'text-orange-400'
+  })()
+
   const displayPts = hasScore ? pred.pts : null
 
   const dateStr = match.match_date
@@ -186,7 +203,7 @@ function MatchRow({
     : '—'
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-3 border-b border-border/40 last:border-0 ${
+    <div className={`flex items-center gap-3 px-3 py-2.5 border-b border-border/40 last:border-0 ${
       isPast ? 'bg-black/20' : isLate ? 'bg-yellow-500/5' : ''
     }`}>
 
@@ -204,8 +221,21 @@ function MatchRow({
         </button>
       </div>
 
-      {/* Centro: VIVO + inputs + ½ pts */}
+      {/* Centro: timestamp + VIVO + inputs + ½ pts */}
       <div className="flex flex-col items-center gap-0.5 shrink-0">
+        {pred.exists_in_db && pred.predicted_at && predTimeColor && (
+          <div className="flex items-center gap-1 leading-none">
+            <span className="text-muted-dark text-[9px]">cargado el</span>
+            <span className={`text-[10px] font-mono ${predTimeColor}`}>
+              {formatPredTime(pred.predicted_at)}
+            </span>
+            {pred.is_modified && (
+              <span className="text-[8px] text-muted bg-elevated border border-border/50 rounded px-1 py-px leading-none">
+                editado
+              </span>
+            )}
+          </div>
+        )}
         {live && (
           <span className="text-red-500 text-[9px] font-bold uppercase tracking-wider leading-none">VIVO</span>
         )}
@@ -747,6 +777,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
 export default function TournamentProdePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { profile } = useAuth()
 
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [matches,    setMatches]    = useState<CompetitionMatch[]>([])
@@ -757,13 +788,9 @@ export default function TournamentProdePage() {
   const [tab,        setTab]        = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
   const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
   const [rankingLoading, setRankingLoading] = useState(false)
-  const [myUserId, setMyUserId] = useState<string | null>(null)
+  const myUserId = profile?.id ?? null
   const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
   const bonusRef = useRef<BonusTabHandle>(null)
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setMyUserId(data.user?.id ?? null))
-  }, [])
 
   useEffect(() => {
     if (tab !== 'ranking' || !id) return
@@ -803,11 +830,12 @@ export default function TournamentProdePage() {
             pts:          p.points_earned ?? null,
             is_modified:  p.is_modified ?? false,
             exists_in_db: true,
+            predicted_at: p.predicted_at ?? null,
           })
         }
         // Inicializar celdas vacías para partidos sin predicción
         for (const m of ms) {
-          if (!map.has(m.id)) map.set(m.id, { home: '', away: '', pts: null, is_modified: false, exists_in_db: false })
+          if (!map.has(m.id)) map.set(m.id, { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null })
         }
         setPredMap(map)
       } finally {
@@ -842,7 +870,10 @@ export default function TournamentProdePage() {
     return Date.now() >= new Date(refMatch.match_date).getTime() - LOCKOUT_HOURS * 3_600_000
   }, [knockoutRoundsMap])
 
-  const config = tournament?.prode_config
+  const config          = tournament?.prode_config
+  const isOwner         = tournament?.created_by === myUserId
+  const isSuperAdmin    = profile?.role === 'superadmin'
+  const canManageAwards = (isOwner || isSuperAdmin) && !!(config?.has_bonus && config?.bonus_types?.length)
   const directQ  = config?.direct_qualifiers ?? 2
   const bestThird = config?.best_third_count  ?? 0
 
@@ -856,6 +887,7 @@ export default function TournamentProdePage() {
         pts:          existing?.pts          ?? null,
         is_modified:  existing?.is_modified  ?? false,
         exists_in_db: existing?.exists_in_db ?? false,
+        predicted_at: existing?.predicted_at ?? null,
       })
       return next
     })
@@ -938,7 +970,7 @@ export default function TournamentProdePage() {
 
       {/* Header */}
       <div className="flex flex-col gap-2">
-        {/* Fila 1: back + nombre */}
+        {/* Fila 1: back + nombre + premios */}
         <div className="flex items-start gap-3">
           <button
             onClick={() => navigate('/torneos')}
@@ -946,12 +978,20 @@ export default function TournamentProdePage() {
           >
             <ChevronLeft size={18} />
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-text text-xl font-semibold tracking-tight leading-tight">{tournament.name}</h1>
             <p className="text-muted text-sm mt-1">
               {tournament.competition?.name ?? ''} · Prode
             </p>
           </div>
+          {canManageAwards && (
+            <button
+              onClick={() => navigate(`/torneos/${id}/premios`)}
+              className="mt-1 shrink-0 flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
+            >
+              <Trophy size={13} /> Premios
+            </button>
+          )}
         </div>
 
         {/* Fila 2: estado / acciones */}

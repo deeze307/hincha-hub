@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Search, X, Loader2, CheckCircle, Trophy, Star, Target, Award, Shield } from 'lucide-react'
+import { ChevronLeft, Search, X, Loader2, CheckCircle, Trophy, Star, Target, Award, Shield, RefreshCw } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { BONUS_TYPE_LABELS } from '../services/tournamentsService'
 import { fetchAwardResults, saveAwardResult, deleteAwardResult } from '../services/awardResultsService'
@@ -17,6 +17,8 @@ const BONUS_ICON: Record<BonusType, React.FC<{ size?: number; className?: string
   mvp:             Award,
   best_goalkeeper: Shield,
 }
+
+const AUTO_BONUS_TYPES = new Set<BonusType>(['champion', 'top_scorer', 'top_assists'])
 
 const BONUS_KIND: Record<BonusType, 'team' | 'player'> = {
   champion:        'team',
@@ -160,7 +162,6 @@ export default function AwardResultsPage() {
   const { id }   = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { profile } = useAuth()
-  const isAdmin  = profile?.role === 'admin' || profile?.role === 'superadmin'
 
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [results,    setResults]    = useState<AwardResult[]>([])
@@ -169,7 +170,6 @@ export default function AwardResultsPage() {
   const [saved,      setSaved]      = useState<BonusType | null>(null)
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/torneos'); return }
     async function load() {
       try {
         const [all, awards] = await Promise.all([
@@ -178,6 +178,11 @@ export default function AwardResultsPage() {
         ])
         const t = all.find(x => x.id === id)
         if (!t) { navigate('/torneos'); return }
+
+        const isOwner      = t.created_by === profile?.id
+        const isSuperAdmin = profile?.role === 'superadmin'
+        if (!isOwner && !isSuperAdmin) { navigate('/torneos'); return }
+
         setTournament(t)
         setResults(awards)
       } finally {
@@ -185,7 +190,7 @@ export default function AwardResultsPage() {
       }
     }
     load()
-  }, [id])
+  }, [id, profile?.id])
 
   const bonusTypes: BonusType[] = tournament?.prode_config?.bonus_types?.length
     ? tournament.prode_config.bonus_types
@@ -259,11 +264,18 @@ export default function AwardResultsPage() {
           const isSaving = saving === bonusType
           const isSaved  = saved === bonusType
 
+          const isAuto = AUTO_BONUS_TYPES.has(bonusType)
+
           return (
             <div key={bonusType} className="card overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-elevated/50">
                 <Icon size={16} className="text-brand" />
                 <h3 className="text-text text-sm font-semibold">{BONUS_TYPE_LABELS[bonusType]}</h3>
+                {isAuto && !isSaved && (
+                  <span className="ml-auto flex items-center gap-1 text-sky-400 text-[11px] font-semibold bg-sky-400/10 border border-sky-400/25 px-2 py-0.5 rounded-full">
+                    <RefreshCw size={10} /> Auto
+                  </span>
+                )}
                 {isSaved && (
                   <span className="ml-auto flex items-center gap-1 text-green-400 text-xs font-semibold">
                     <CheckCircle size={13} /> Guardado
@@ -276,7 +288,9 @@ export default function AwardResultsPage() {
                 {current && (
                   <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/25 rounded-lg">
                     <div className="flex-1 min-w-0">
-                      <p className="text-green-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Ganador cargado</p>
+                      <p className="text-green-400 text-xs font-semibold uppercase tracking-wide mb-0.5">
+                        {isAuto ? 'Sincronizado desde la API' : 'Ganador cargado'}
+                      </p>
                       <p className="text-text text-sm font-semibold truncate">
                         {kind === 'team' ? current.team_name : current.player_name}
                       </p>
@@ -294,7 +308,9 @@ export default function AwardResultsPage() {
                 {/* Buscador */}
                 <div>
                   <p className="text-muted text-xs mb-2">
-                    {current ? 'Reemplazar ganador:' : 'Cargar ganador:'}
+                    {isAuto
+                      ? current ? 'Forzar resultado manualmente:' : 'Aún no sincronizado. Podés cargarlo a mano:'
+                      : current ? 'Reemplazar ganador:' : 'Cargar ganador:'}
                   </p>
                   {kind === 'team' ? (
                     <TeamSearch
@@ -315,6 +331,12 @@ export default function AwardResultsPage() {
                     />
                   )}
                 </div>
+
+                {isAuto && !current && (
+                  <p className="text-muted-dark text-[11px] leading-relaxed">
+                    Se actualiza automáticamente cada vez que se sincroniza el fixture.
+                  </p>
+                )}
 
                 {isSaving && (
                   <div className="flex items-center gap-2 text-muted text-xs">

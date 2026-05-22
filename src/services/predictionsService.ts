@@ -12,6 +12,7 @@ export interface MatchPrediction {
   away_prediction:  number | null
   points_earned?:   number | null
   is_modified?:     boolean
+  predicted_at?:    string | null
 }
 
 export async function fetchUserPredictions(
@@ -22,7 +23,7 @@ export async function fetchUserPredictions(
 
   const { data, error } = await supabase
     .from('match_predictions')
-    .select('id, tournament_id, match_id, home_prediction, away_prediction, points_earned, is_modified')
+    .select('id, tournament_id, match_id, home_prediction, away_prediction, points_earned, is_modified, predicted_at')
     .eq('user_id', user.id)
     .eq('tournament_id', tournamentId)
 

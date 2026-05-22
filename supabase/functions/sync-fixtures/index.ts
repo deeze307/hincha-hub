@@ -189,6 +189,120 @@ Deno.serve(async (_req) => {
 
       if (error) throw error
       totalUpserted += rows.length
+
+      // ── Auto-sync de award_results para bonus automáticos ──────────────
+      // Solo para torneos de esta competencia que tengan esos bonus activos.
+      const { data: compTournaments } = await supabase
+        .from('tournaments')
+        .select('id, prode_config')
+        .eq('competition_id', comp.competitionId)
+
+      for (const tournament of compTournaments ?? []) {
+        const bonusTypes: string[] = tournament.prode_config?.bonus_types ?? []
+        const awardRows: object[]  = []
+
+        // Campeón: equipo que ganó la Final
+        if (bonusTypes.includes('champion')) {
+          const { data: finalMatch } = await supabase
+            .from('competition_matches')
+            .select('winner_team_id')
+            .eq('competition_id', comp.competitionId)
+            .eq('round', 'Final')
+            .in('status', ['FT', 'AET', 'PEN'])
+            .not('winner_team_id', 'is', null)
+            .limit(1)
+            .maybeSingle()
+
+          if (finalMatch?.winner_team_id) {
+            const { data: winTeam } = await supabase
+              .from('teams')
+              .select('id, name, logo_url')
+              .eq('id', finalMatch.winner_team_id)
+              .maybeSingle()
+
+            if (winTeam) {
+              awardRows.push({
+                tournament_id: tournament.id,
+                award_type:    'champion',
+                team_id:       winTeam.id,
+                team_name:     winTeam.name,
+                team_logo_url: winTeam.logo_url,
+                player_id:     null,
+                player_name:   null,
+                resolved_at:   new Date().toISOString(),
+              })
+            }
+          }
+        }
+
+        // Goleador: primer resultado de /players/topscorers
+        if (bonusTypes.includes('top_scorer')) {
+          try {
+            const tsData = await apiFetch(
+              `/players/topscorers?league=${comp.externalId}&season=${comp.seasonYear}`
+            )
+            const topScorer = tsData?.response?.[0]
+            if (topScorer?.player?.id) {
+              const { data: dbPlayer } = await supabase
+                .from('players')
+                .select('id, name')
+                .eq('external_id', topScorer.player.id)
+                .eq('competition_id', comp.competitionId)
+                .maybeSingle()
+
+              awardRows.push({
+                tournament_id: tournament.id,
+                award_type:    'top_scorer',
+                team_id:       null,
+                team_name:     null,
+                team_logo_url: null,
+                player_id:     dbPlayer?.id ?? null,
+                player_name:   topScorer.player.name ?? dbPlayer?.name ?? null,
+                resolved_at:   new Date().toISOString(),
+              })
+            }
+          } catch (e) {
+            console.error('top_scorer sync failed:', e)
+          }
+        }
+
+        // Asistidor: primer resultado de /players/topassists
+        if (bonusTypes.includes('top_assists')) {
+          try {
+            const taData = await apiFetch(
+              `/players/topassists?league=${comp.externalId}&season=${comp.seasonYear}`
+            )
+            const topAssist = taData?.response?.[0]
+            if (topAssist?.player?.id) {
+              const { data: dbPlayer } = await supabase
+                .from('players')
+                .select('id, name')
+                .eq('external_id', topAssist.player.id)
+                .eq('competition_id', comp.competitionId)
+                .maybeSingle()
+
+              awardRows.push({
+                tournament_id: tournament.id,
+                award_type:    'top_assists',
+                team_id:       null,
+                team_name:     null,
+                team_logo_url: null,
+                player_id:     dbPlayer?.id ?? null,
+                player_name:   topAssist.player.name ?? dbPlayer?.name ?? null,
+                resolved_at:   new Date().toISOString(),
+              })
+            }
+          } catch (e) {
+            console.error('top_assists sync failed:', e)
+          }
+        }
+
+        if (awardRows.length > 0) {
+          await supabase
+            .from('award_results')
+            .upsert(awardRows, { onConflict: 'tournament_id,award_type' })
+        }
+      }
     }
 
     // Disparar score-predictions en background para actualizar puntos
