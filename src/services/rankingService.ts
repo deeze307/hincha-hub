@@ -185,3 +185,82 @@ export async function fetchTournamentRanking(tournamentId: string): Promise<Rank
 
   return entries
 }
+
+// ─── Desglose de puntos por partido ─────────────────────────────
+
+export interface UserMatchBreakdown {
+  matchId:      string
+  matchDate:    string | null
+  homeTeamName: string
+  homeTeamLogo: string | null
+  awayTeamName: string
+  awayTeamLogo: string | null
+  homeScore:    number
+  awayScore:    number
+  homePred:     number
+  awayPred:     number
+  pointsEarned: number
+  isHalf:       boolean
+}
+
+export async function fetchUserMatchBreakdown(
+  tournamentId: string,
+  userId:       string,
+): Promise<UserMatchBreakdown[]> {
+  const { data: preds } = await supabase
+    .from('match_predictions')
+    .select('match_id, home_prediction, away_prediction, points_earned, predicted_at, is_modified')
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId)
+    .not('home_prediction', 'is', null)
+    .not('away_prediction', 'is', null)
+    .not('points_earned', 'is', null)
+    .gt('points_earned', 0)
+
+  if (!preds?.length) return []
+
+  const matchIds = preds.map((p: any) => p.match_id)
+
+  const { data: matches } = await supabase
+    .from('competition_matches')
+    .select(`
+      id, match_date, home_score, away_score,
+      home_team:home_team_id ( id, name, logo_url ),
+      away_team:away_team_id ( id, name, logo_url )
+    `)
+    .in('id', matchIds)
+    .not('home_score', 'is', null)
+    .not('away_score', 'is', null)
+
+  const matchMap = new Map((matches ?? []).map((m: any) => [m.id, m]))
+  const EARLY_MS = 24 * 3_600_000
+
+  return preds
+    .map((p: any) => {
+      const m = matchMap.get(p.match_id)
+      if (!m) return null
+      const matchTime = m.match_date ? new Date(m.match_date).getTime() : null
+      const predTime  = p.predicted_at ? new Date(p.predicted_at).getTime() : 0
+      const isLate    = matchTime != null && (matchTime - predTime) < EARLY_MS
+      return {
+        matchId:      p.match_id,
+        matchDate:    m.match_date,
+        homeTeamName: m.home_team?.name     ?? '?',
+        homeTeamLogo: m.home_team?.logo_url ?? null,
+        awayTeamName: m.away_team?.name     ?? '?',
+        awayTeamLogo: m.away_team?.logo_url ?? null,
+        homeScore:    m.home_score,
+        awayScore:    m.away_score,
+        homePred:     p.home_prediction,
+        awayPred:     p.away_prediction,
+        pointsEarned: p.points_earned,
+        isHalf:       p.is_modified || isLate,
+      }
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => {
+      if (!a.matchDate) return 1
+      if (!b.matchDate) return -1
+      return new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime()
+    }) as UserMatchBreakdown[]
+}
