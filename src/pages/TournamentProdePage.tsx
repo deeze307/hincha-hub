@@ -14,7 +14,6 @@ import {
 import { searchTeams, searchPlayers } from '../services/teamsService'
 import { fetchTournamentRanking, fetchUserMatchBreakdown } from '../services/rankingService'
 import type { UserMatchBreakdown } from '../services/rankingService'
-import { supabase } from '../lib/supabase'
 import type { Tournament } from '../services/tournamentsService'
 import type { CompetitionMatch } from '../services/matchesService'
 import type { BonusPrediction } from '../services/predictionsService'
