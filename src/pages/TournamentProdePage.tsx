@@ -203,9 +203,26 @@ function MatchRow({
     : '—'
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 border-b border-border/40 last:border-0 ${
+    <div className={`border-b border-border/40 last:border-0 ${
       isPast ? 'bg-black/20' : isLate ? 'bg-yellow-500/5' : ''
     }`}>
+
+      {/* Timestamp row — fuera del flex de equipos para no romper el layout */}
+      {pred.exists_in_db && pred.predicted_at && predTimeColor && (
+        <div className="flex items-center justify-center gap-1 pt-2 px-3">
+          <span className="text-muted-dark text-[9px]">cargado el</span>
+          <span className={`text-[10px] font-mono ${predTimeColor}`}>
+            {formatPredTime(pred.predicted_at)}
+          </span>
+          {pred.is_modified && (
+            <span className="text-[8px] text-muted bg-elevated border border-border/50 rounded px-1 py-px leading-none">
+              editado
+            </span>
+          )}
+        </div>
+      )}
+
+    <div className="flex items-center gap-3 px-3 py-2.5">
 
       {/* Equipo local */}
       <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
@@ -221,21 +238,8 @@ function MatchRow({
         </button>
       </div>
 
-      {/* Centro: timestamp + VIVO + inputs + ½ pts */}
+      {/* Centro: VIVO + inputs + ½ pts */}
       <div className="flex flex-col items-center gap-0.5 shrink-0">
-        {pred.exists_in_db && pred.predicted_at && predTimeColor && (
-          <div className="flex items-center gap-1 leading-none">
-            <span className="text-muted-dark text-[9px]">cargado el</span>
-            <span className={`text-[10px] font-mono ${predTimeColor}`}>
-              {formatPredTime(pred.predicted_at)}
-            </span>
-            {pred.is_modified && (
-              <span className="text-[8px] text-muted bg-elevated border border-border/50 rounded px-1 py-px leading-none">
-                editado
-              </span>
-            )}
-          </div>
-        )}
         {live && (
           <span className="text-red-500 text-[9px] font-bold uppercase tracking-wider leading-none">VIVO</span>
         )}
@@ -283,6 +287,7 @@ function MatchRow({
           <span className="text-muted-dark text-[11px] leading-tight">{dateStr}</span>
         )}
       </div>
+    </div>
     </div>
   )
 }
@@ -1073,7 +1078,7 @@ export default function TournamentProdePage() {
                     <MatchRow
                       key={m.id}
                       match={m}
-                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
+                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                       onChange={(h, a) => setPred(m.id, h, a)}
                       onTeamClick={handleTeamClick}
                     />
@@ -1535,7 +1540,7 @@ function KnockoutTab({
                   <MatchRow
                     key={m.id}
                     match={m}
-                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false }}
+                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                     onChange={(h, a) => onPred(m.id, h, a)}
                     onTeamClick={onTeamClick}
                   />
