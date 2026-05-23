@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2 } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
 import type { BonusType } from '../services/tournamentsService'
@@ -12,6 +12,7 @@ import {
   fetchUserBonusPredictions, saveBonusPredictions,
 } from '../services/predictionsService'
 import { searchTeams, searchPlayers } from '../services/teamsService'
+import { createInviteLink } from '../services/inviteService'
 import { fetchTournamentRanking, fetchUserMatchBreakdown } from '../services/rankingService'
 import type { UserMatchBreakdown } from '../services/rankingService'
 import type { Tournament } from '../services/tournamentsService'
@@ -878,8 +879,23 @@ export default function TournamentProdePage() {
   const isOwner         = tournament?.created_by === myUserId
   const isSuperAdmin    = profile?.role === 'superadmin'
   const canManageAwards = (isOwner || isSuperAdmin) && !!(config?.has_bonus && config?.bonus_types?.length)
+  const canInvite       = isOwner || isSuperAdmin
   const directQ  = config?.direct_qualifiers ?? 2
   const bestThird = config?.best_third_count  ?? 0
+
+  const [inviteCopied, setInviteCopied] = useState(false)
+
+  async function handleInvite() {
+    if (!id) return
+    try {
+      const link = await createInviteLink(id)
+      await navigator.clipboard.writeText(link)
+      setInviteCopied(true)
+      setTimeout(() => setInviteCopied(false), 2500)
+    } catch {
+      // silently ignore clipboard errors
+    }
+  }
 
   function setPred(matchId: string, home: string, away: string) {
     setPredMap(prev => {
@@ -988,14 +1004,29 @@ export default function TournamentProdePage() {
               {tournament.competition?.name ?? ''} · Prode
             </p>
           </div>
-          {canManageAwards && (
-            <button
-              onClick={() => navigate(`/torneos/${id}/premios`)}
-              className="mt-1 shrink-0 flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
-            >
-              <Trophy size={13} /> Premios
-            </button>
-          )}
+          <div className="flex items-center gap-2 mt-1 shrink-0">
+            {canInvite && (
+              <button
+                onClick={handleInvite}
+                className={`shrink-0 flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${
+                  inviteCopied
+                    ? 'text-green-400 border-green-500/40 bg-green-500/10'
+                    : 'text-muted hover:text-text bg-elevated hover:bg-elevated/80 border-border'
+                }`}
+              >
+                <Link2 size={13} />
+                {inviteCopied ? '¡Copiado!' : 'Invitar'}
+              </button>
+            )}
+            {canManageAwards && (
+              <button
+                onClick={() => navigate(`/torneos/${id}/premios`)}
+                className="shrink-0 flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
+              >
+                <Trophy size={13} /> Premios
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Fila 2: estado / acciones */}

@@ -76,7 +76,7 @@ export default function TournamentsPage() {
         {isSuperAdmin && (
           <button
             onClick={() => navigate('/torneos/nuevo')}
-            className="btn-primary flex items-center gap-2"
+            className="btn-primary flex items-center gap-2 py-2 px-4 text-sm lg:py-3 lg:px-6"
           >
             <Plus size={16} />
             Nuevo torneo
@@ -107,7 +107,7 @@ export default function TournamentsPage() {
           <button
             key={v}
             onClick={() => setTab(v)}
-            className={`px-4 py-1.5 rounded-[8px] text-sm font-semibold transition-all ${
+            className={`px-3 py-1 lg:px-4 lg:py-1.5 rounded-[8px] text-xs lg:text-sm font-semibold transition-all ${
               tab === v ? 'bg-brand text-white' : 'text-muted hover:text-text'
             }`}
           >

@@ -15,12 +15,14 @@ import RequestsPage from './pages/RequestsPage'
 import TournamentProdePage from './pages/TournamentProdePage'
 import TournamentRankingPage from './pages/TournamentRankingPage'
 import AwardResultsPage from './pages/AwardResultsPage'
+import InvitePage from './pages/InvitePage'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/unirse/:token" element={<InvitePage />} />
         <Route element={<AppLayout />}>
           <Route index element={<HomePage />} />
           <Route path="/torneos"              element={<TournamentsPage />} />
