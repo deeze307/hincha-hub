@@ -57,8 +57,13 @@ export function useInstallPrompt() {
     setDismissed(true)
   }
 
-  const isMobile = isIOS || isAndroid
-  const showBanner = isMobile && !isInstalled && !dismissed
+  const ua         = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  const isFirefox  = /Firefox\//.test(ua)
+  const isSamsung  = /SamsungBrowser/.test(ua)
 
-  return { showBanner, isIOS, isAndroid, hasDeferredPrompt: deferredPrompt !== null, install, dismiss }
+  const isMobile  = isIOS || isAndroid
+  // Firefox Android no soporta instalación de PWA — no tiene sentido mostrar el banner
+  const showBanner = isMobile && !isInstalled && !dismissed && !isFirefox
+
+  return { showBanner, isIOS, isAndroid, isFirefox, isSamsung, hasDeferredPrompt: deferredPrompt !== null, install, dismiss }
 }

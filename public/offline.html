@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#09090F" />
+  <title>Sin conexión — HinchaHub</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #09090F;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .icon-wrap {
+      width: 84px;
+      height: 84px;
+      background: rgba(255,116,3,0.10);
+      border: 1px solid rgba(255,116,3,0.22);
+      border-radius: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    p {
+      font-size: 14px;
+      color: #6b7280;
+      max-width: 260px;
+      line-height: 1.6;
+      margin-top: 6px;
+    }
+    .btn {
+      background: #FF7403;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 13px 36px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.75; }
+    .checking {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .checking.visible { display: flex; }
+    .dot {
+      width: 7px;
+      height: 7px;
+      background: #6b7280;
+      border-radius: 50%;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="icon-wrap">
+    <svg width="38" height="38" viewBox="0 0 24 24" fill="none"
+      stroke="#FF7403" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="1" y1="1" x2="23" y2="23"/>
+      <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+      <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
+      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+      <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+  </div>
+
+  <div>
+    <h1>Sin conexión</h1>
+    <p>Revisá tu conexión a internet y volvé a intentarlo.</p>
+  </div>
+
+  <button class="btn" onclick="retry()">Reintentar</button>
+
+  <div class="checking" id="checking">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <span>Reconectando…</span>
+  </div>
+
+  <script>
+    window.addEventListener('online', () => window.location.reload())
+
+    function retry() {
+      document.getElementById('checking').classList.add('visible')
+      setTimeout(function () {
+        if (navigator.onLine) {
+          window.location.reload()
+        } else {
+          document.getElementById('checking').classList.remove('visible')
+        }
+      }, 1500)
+    }
+  </script>
+</body>
+</html>
