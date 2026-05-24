@@ -63,7 +63,7 @@ Deno.serve(async (_req) => {
     // 1. Obtener todas las competencias con torneos activos
     const { data: tournaments } = await supabase
       .from('tournaments')
-      .select('competition_id, team_type, competitions(external_id, season_year)')
+      .select('competition_id, team_type, competitions(external_id, season_year, is_test)')
       .not('competition_id', 'is', null)
 
     if (!tournaments?.length) {
@@ -75,6 +75,7 @@ Deno.serve(async (_req) => {
     const competitions = tournaments
       .filter(t => {
         if (!t.competition_id || seen.has(t.competition_id)) return false
+        if ((t.competitions as any)?.is_test) return false
         seen.add(t.competition_id)
         return true
       })

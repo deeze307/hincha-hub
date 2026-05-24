@@ -87,7 +87,7 @@ export async function fetchTournaments(): Promise<Tournament[]> {
       max_participants, status, created_by, competition_id,
       team_type, prode_config, prediction_deadline,
       created_at, updated_at, is_hidden,
-      competition:competitions(name, logo_url, country),
+      competition:competitions(name, logo_url, country, season_year),
       participant_count:tournament_registrations(count)
     `)
     .order('created_at', { ascending: false })
