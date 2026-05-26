@@ -1146,7 +1146,7 @@ export default function TournamentProdePage() {
                     <MatchRow
                       key={m.id}
                       match={m}
-                      pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
+                      pred={predMap.get(m.id) ?? { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                       onChange={(h, a) => setPred(m.id, h, a)}
                       onTeamClick={handleTeamClick}
                     />
@@ -1613,7 +1613,7 @@ function KnockoutTab({
                   <MatchRow
                     key={m.id}
                     match={m}
-                    pred={predMap.get(m.id) ?? { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
+                    pred={predMap.get(m.id) ?? { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                     onChange={(h, a) => onPred(m.id, h, a)}
                     onTeamClick={onTeamClick}
                   />
