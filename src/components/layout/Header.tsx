@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Bell, ChevronDown, PanelLeftClose, PanelLeftOpen, User, LogOut, Target, Users, Megaphone, Mail } from 'lucide-react'
-import { useAuth } from '../../contexts/AuthContext'
+import { useAuth, getDisplayName } from '../../contexts/AuthContext'
 import { useAppStore } from '../../store/useAppStore'
 import { useNotificationsStore } from '../../store/useNotificationsStore'
 import { useRequestsStore } from '../../store/useRequestsStore'
@@ -33,8 +33,8 @@ export default function Header() {
   const userRef = useRef<HTMLDivElement>(null)
   const bellRef = useRef<HTMLDivElement>(null)
 
-  const displayName = profile?.full_name?.split(' ')[0] ?? user?.user_metadata?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Usuario'
-  const fullName    = profile?.full_name ?? user?.user_metadata?.full_name ?? displayName
+  const fullName    = getDisplayName(profile, user?.email)
+  const displayName = fullName.split(' ')[0]
   const initials    = fullName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
   const avatarUrl   = profile?.avatar_url ?? user?.user_metadata?.avatar_url ?? null
 

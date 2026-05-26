@@ -8,8 +8,17 @@ export interface Profile {
   id:         string
   username:   string | null
   full_name:  string | null
+  alias:      string | null
   avatar_url: string | null
   role:       UserRole
+}
+
+/** Alias → full_name → username → email prefix → 'Usuario' */
+export function getDisplayName(
+  profile: Pick<Profile, 'alias' | 'full_name' | 'username'> | null,
+  email?: string | null,
+): string {
+  return profile?.alias ?? profile?.full_name ?? profile?.username ?? email?.split('@')[0] ?? 'Usuario'
 }
 
 interface AuthState {
@@ -37,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function fetchProfile(userId: string): Promise<Profile | null> {
     const { data } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, role')
+      .select('id, username, full_name, alias, avatar_url, role')
       .eq('id', userId)
       .single()
     return data as Profile | null

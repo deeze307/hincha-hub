@@ -1,6 +1,17 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 
+export async function updateAlias(userId: string, alias: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ alias: alias.trim() || null })
+    .eq('id', userId)
+  if (error) {
+    if (error.code === '23505') throw new Error('Ese alias ya está en uso, elegí otro')
+    throw new Error(error.message)
+  }
+}
+
 export async function uploadAvatar(userId: string, file: File): Promise<string> {
   const ext  = file.name.split('.').pop() ?? 'jpg'
   const path = `${userId}/avatar.${ext}`

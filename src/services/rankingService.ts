@@ -106,7 +106,7 @@ export async function fetchTournamentRanking(tournamentId: string): Promise<Rank
   // 1b. Perfiles por separado (evita depender de FK para join en PostgREST)
   const { data: profileRows } = await supabase
     .from('profiles')
-    .select('id, username, full_name, avatar_url')
+    .select('id, username, full_name, alias, avatar_url')
     .in('id', userIds)
 
   const profileMap = new Map((profileRows ?? []).map((p: any) => [p.id, p]))
@@ -155,7 +155,7 @@ export async function fetchTournamentRanking(tournamentId: string): Promise<Rank
     return {
       rank:          0,
       userId:        r.user_id,
-      displayName:   profile?.full_name ?? profile?.username ?? 'Usuario',
+      displayName:   profile?.alias ?? profile?.full_name ?? profile?.username ?? 'Usuario',
       avatarUrl:     profile?.avatar_url ?? null,
       matchPts:      mp.pts,
       bonusPts:      bp,

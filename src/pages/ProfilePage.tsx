@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Trophy, Zap, Users, Loader2, Camera, Flame } from 'lucide-react'
+import { Trophy, Zap, Users, Loader2, Camera, Flame, Pencil } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth, getDisplayName } from '../contexts/AuthContext'
 import { fetchMyTournamentPositions } from '../services/rankingService'
-import { uploadAvatar, fetchUserStreaks } from '../services/profileService'
+import { uploadAvatar, fetchUserStreaks, updateAlias } from '../services/profileService'
 import type { MyTournamentPosition } from '../services/rankingService'
 
 function medalFor(rank: number): string {
@@ -20,11 +20,8 @@ export default function ProfilePage() {
 
   const isGoogleUser = user?.app_metadata?.provider === 'google'
 
-  const displayName = profile?.full_name
-    ?? user?.user_metadata?.full_name
-    ?? user?.email?.split('@')[0]
-    ?? 'Usuario'
-  const initials  = displayName.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const displayName = getDisplayName(profile, user?.email)
+  const initials    = displayName.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
   const email     = user?.email ?? ''
   const avatarUrl = profile?.avatar_url ?? user?.user_metadata?.avatar_url ?? null
 
@@ -33,6 +30,10 @@ export default function ProfilePage() {
   const [loading,        setLoading]        = useState(true)
   const [uploading,      setUploading]      = useState(false)
   const [uploadError,    setUploadError]    = useState<string | null>(null)
+  const [editingAlias,   setEditingAlias]   = useState(false)
+  const [aliasValue,     setAliasValue]     = useState('')
+  const [aliasSaving,    setAliasSaving]    = useState(false)
+  const [aliasError,     setAliasError]     = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -43,6 +44,27 @@ export default function ProfilePage() {
       setStreaks(str)
     }).catch(console.error).finally(() => setLoading(false))
   }, [])
+
+  function handleEditAlias() {
+    setAliasValue(profile?.alias ?? '')
+    setAliasError(null)
+    setEditingAlias(true)
+  }
+
+  async function handleSaveAlias() {
+    if (!user) return
+    setAliasSaving(true)
+    setAliasError(null)
+    try {
+      await updateAlias(user.id, aliasValue)
+      await refreshProfile()
+      setEditingAlias(false)
+    } catch (err: any) {
+      setAliasError(err.message ?? 'Error al guardar el alias')
+    } finally {
+      setAliasSaving(false)
+    }
+  }
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -127,6 +149,54 @@ export default function ProfilePage() {
             <p className="text-red-400 text-xs mt-1">{uploadError}</p>
           )}
         </div>
+      </div>
+
+      {/* Alias */}
+      <div className="card p-5">
+        <h3 className="text-text font-semibold text-sm mb-0.5">Alias en torneos</h3>
+        <p className="text-muted text-xs mb-3">Tu alias reemplaza tu nombre real en la tabla de posiciones.</p>
+
+        {editingAlias ? (
+          <div className="space-y-2">
+            <input
+              value={aliasValue}
+              onChange={e => setAliasValue(e.target.value)}
+              maxLength={30}
+              autoFocus
+              placeholder="Tu alias..."
+              className="w-full bg-elevated border border-border rounded-lg px-3 py-2 text-text text-sm outline-none focus:border-brand transition-colors"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEditingAlias(false)}
+                className="px-3 py-2 text-muted hover:text-text text-sm rounded-lg hover:bg-elevated transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveAlias}
+                disabled={aliasSaving}
+                className="px-4 py-2 bg-brand hover:bg-brand-h text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 flex items-center gap-1.5"
+              >
+                {aliasSaving ? <Loader2 size={14} className="animate-spin" /> : 'Guardar'}
+              </button>
+            </div>
+            {aliasError && <p className="text-red-400 text-xs">{aliasError}</p>}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-elevated border border-border rounded-lg px-3 py-2">
+            <span className={`flex-1 text-sm ${profile?.alias ? 'text-text' : 'text-muted italic'}`}>
+              {profile?.alias ?? 'Sin alias configurado'}
+            </span>
+            <button
+              onClick={handleEditAlias}
+              className="flex items-center gap-1 text-brand text-xs font-medium shrink-0 hover:underline"
+            >
+              <Pencil size={12} />
+              Editar
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Stats */}

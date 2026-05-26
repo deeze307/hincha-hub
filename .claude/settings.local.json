@@ -5,7 +5,9 @@
       "Bash(yarn config *)",
       "Bash(yarn dev *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\DiegoMaidana\\\\Documents\\\\Project\\\\HinchaHub\\\\hincha-hub\\\\src\" -Recurse)",
+      "Bash(Select-Object -First 30)"
     ]
   }
 }
