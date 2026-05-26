@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2 } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
 import type { BonusType } from '../services/tournamentsService'
@@ -13,6 +13,8 @@ import {
 } from '../services/predictionsService'
 import { searchTeams, searchPlayers } from '../services/teamsService'
 import { createInviteLink } from '../services/inviteService'
+import { Toast } from '../components/molecules/Toast'
+import type { ToastInfo } from '../components/molecules/Toast'
 import { fetchTournamentRanking, fetchUserMatchBreakdown } from '../services/rankingService'
 import type { UserMatchBreakdown } from '../services/rankingService'
 import type { Tournament } from '../services/tournamentsService'
@@ -26,6 +28,8 @@ import type { RankingEntry } from '../services/rankingService'
 interface ScoreInput {
   home:         string
   away:         string
+  home_orig:    string          // valor tal como se cargó/guardó en DB (para detectar cambios reales)
+  away_orig:    string
   pts:          number | null  // points_earned from DB after scoring
   is_modified:  boolean        // true = permanently locked (used their one edit)
   exists_in_db: boolean        // false = never saved yet
@@ -784,13 +788,19 @@ export default function TournamentProdePage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
 
-  const [tournament, setTournament] = useState<Tournament | null>(null)
-  const [matches,    setMatches]    = useState<CompetitionMatch[]>([])
-  const [predMap,    setPredMap]    = useState<PredMap>(new Map())
-  const [loading,    setLoading]    = useState(true)
-  const [saving,     setSaving]     = useState(false)
-  const [saved,      setSaved]      = useState(false)
-  const [tab,        setTab]        = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
+  const [tournament,  setTournament]  = useState<Tournament | null>(null)
+  const [matches,     setMatches]     = useState<CompetitionMatch[]>([])
+  const [predMap,     setPredMap]     = useState<PredMap>(new Map())
+  const [loading,     setLoading]     = useState(true)
+  const [refreshing,  setRefreshing]  = useState(false)
+  const [saving,      setSaving]      = useState(false)
+  const [saved,       setSaved]       = useState(false)
+  const [tab,         setTab]         = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
+  const [toast,       setToast]       = useState<ToastInfo | null>(null)
+
+  function showToast(message: string, type: 'success' | 'error') {
+    setToast({ message, type })
+  }
   const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
   const [rankingLoading, setRankingLoading] = useState(false)
   const myUserId = profile?.id ?? null
@@ -829,9 +839,13 @@ export default function TournamentProdePage() {
         // Poblar el map de predicciones
         const map: PredMap = new Map()
         for (const p of preds) {
+          const home = p.home_prediction != null ? String(p.home_prediction) : ''
+          const away = p.away_prediction != null ? String(p.away_prediction) : ''
           map.set(p.match_id, {
-            home:         p.home_prediction != null ? String(p.home_prediction) : '',
-            away:         p.away_prediction != null ? String(p.away_prediction) : '',
+            home,
+            away,
+            home_orig:    home,
+            away_orig:    away,
             pts:          p.points_earned ?? null,
             is_modified:  p.is_modified ?? false,
             exists_in_db: true,
@@ -840,7 +854,7 @@ export default function TournamentProdePage() {
         }
         // Inicializar celdas vacías para partidos sin predicción
         for (const m of ms) {
-          if (!map.has(m.id)) map.set(m.id, { home: '', away: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null })
+          if (!map.has(m.id)) map.set(m.id, { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null })
         }
         setPredMap(map)
       } finally {
@@ -858,6 +872,26 @@ export default function TournamentProdePage() {
       seasonYear:      (tournament as any).competition?.season_year ?? new Date().getFullYear(),
       competitionName: tournament.competition?.name ?? null,
     })
+  }
+
+  async function refreshMatches() {
+    if (!tournament?.competition_id) return
+    setRefreshing(true)
+    try {
+      const seasonYear = (tournament as any).competition?.season_year ?? new Date().getFullYear()
+      const ms = await fetchMatchesByCompetition(tournament.competition_id, seasonYear)
+      setMatches(ms)
+      // Preserve predMap — only add entries for any brand-new match IDs not yet in the map
+      setPredMap(prev => {
+        const next = new Map(prev)
+        for (const m of ms) {
+          if (!next.has(m.id)) next.set(m.id, { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null })
+        }
+        return next
+      })
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   const anyUnlocked = useMemo(
@@ -904,6 +938,8 @@ export default function TournamentProdePage() {
       next.set(matchId, {
         home,
         away,
+        home_orig:    existing?.home_orig    ?? '',
+        away_orig:    existing?.away_orig    ?? '',
         pts:          existing?.pts          ?? null,
         is_modified:  existing?.is_modified  ?? false,
         exists_in_db: existing?.exists_in_db ?? false,
@@ -918,43 +954,50 @@ export default function TournamentProdePage() {
     if (!id) return
     setSaving(true)
     try {
-      if (tab === 'bonus') {
-        await bonusRef.current?.save()
-      } else {
-        const toSave = [...predMap.entries()]
-          .filter(([match_id, v]) => {
-            if (v.home === '' && v.away === '') return false
-            if (v.is_modified) return false
-            const match = matches.find(m => m.id === match_id)
-            return match && !isMatchLocked(match)
-          })
-          .map(([match_id, v]) => ({
-            match_id,
-            home:   v.home !== '' ? parseInt(v.home) : null,
-            away:   v.away !== '' ? parseInt(v.away) : null,
-            is_new: !v.exists_in_db,
-          }))
+      // Guardar predicciones de partido (fase de grupos + eliminatoria)
+      const toSave = [...predMap.entries()]
+        .filter(([match_id, v]) => {
+          if (v.home === '' && v.away === '') return false
+          if (v.is_modified) return false
+          // Si ya está en DB y el valor no cambió, no reenviar (evita marcarla como "editada")
+          if (v.exists_in_db && v.home === v.home_orig && v.away === v.away_orig) return false
+          const match = matches.find(m => m.id === match_id)
+          return match && !isMatchLocked(match)
+        })
+        .map(([match_id, v]) => ({
+          match_id,
+          home:   v.home !== '' ? parseInt(v.home) : null,
+          away:   v.away !== '' ? parseInt(v.away) : null,
+          is_new: !v.exists_in_db,
+        }))
 
-        if (toSave.length) {
-          await saveMatchPredictions(id, toSave)
-          setPredMap(prev => {
-            const next = new Map(prev)
-            for (const p of toSave) {
-              const existing = prev.get(p.match_id)
-              if (!existing) continue
-              next.set(p.match_id, {
-                ...existing,
-                exists_in_db: true,
-                is_modified:  !p.is_new,
-              })
-            }
-            return next
-          })
-        }
+      if (toSave.length) {
+        await saveMatchPredictions(id, toSave)
+        setPredMap(prev => {
+          const next = new Map(prev)
+          for (const p of toSave) {
+            const existing = prev.get(p.match_id)
+            if (!existing) continue
+            next.set(p.match_id, {
+              ...existing,
+              home_orig:    existing.home,
+              away_orig:    existing.away,
+              exists_in_db: true,
+              is_modified:  !p.is_new,
+            })
+          }
+          return next
+        })
       }
+
+      // Guardar bonus (siempre, independientemente del tab activo)
+      await bonusRef.current?.save()
 
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+      showToast('¡Predicciones guardadas!', 'success')
+    } catch (err) {
+      showToast('Error al guardar. Intentá de nuevo.', 'error')
     } finally {
       setSaving(false)
     }
@@ -977,10 +1020,9 @@ export default function TournamentProdePage() {
     { key: 'ranking',  label: 'Ranking' },
   ] as { key: typeof tab; label: string }[]
 
-  // Conteo de predicciones completas en partidos todavía abiertos
-  const groupMatches        = matches.filter(m => m.round_order === 1)
-  const unlockedGroupMatches = groupMatches.filter(m => !isMatchLocked(m))
-  const filledCount         = unlockedGroupMatches.filter(m => {
+  // Conteo de predicciones completas en partidos todavía abiertos (todas las fases)
+  const unlockedMatches = matches.filter(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified))
+  const filledCount     = unlockedMatches.filter(m => {
     const p = predMap.get(m.id)
     return p && p.home !== '' && p.away !== ''
   }).length
@@ -1004,20 +1046,32 @@ export default function TournamentProdePage() {
               {tournament.competition?.name ?? ''} · Prode
             </p>
           </div>
-          <div className="flex items-center gap-2 mt-1 shrink-0">
-            {canInvite && (
+          <div className="flex flex-col items-end gap-1.5 mt-1 shrink-0">
+            {/* Fila 1: refresh + invitar */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleInvite}
-                className={`shrink-0 flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${
-                  inviteCopied
-                    ? 'text-green-400 border-green-500/40 bg-green-500/10'
-                    : 'text-muted hover:text-text bg-elevated hover:bg-elevated/80 border-border'
-                }`}
+                onClick={refreshMatches}
+                disabled={refreshing}
+                title="Actualizar partidos"
+                className="shrink-0 flex items-center justify-center w-8 h-8 text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg transition-colors disabled:opacity-40"
               >
-                <Link2 size={13} />
-                {inviteCopied ? '¡Copiado!' : 'Invitar'}
+                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
               </button>
-            )}
+              {canInvite && (
+                <button
+                  onClick={handleInvite}
+                  className={`shrink-0 flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-colors ${
+                    inviteCopied
+                      ? 'text-green-400 border-green-500/40 bg-green-500/10'
+                      : 'text-muted hover:text-text bg-elevated hover:bg-elevated/80 border-border'
+                  }`}
+                >
+                  <Link2 size={13} />
+                  {inviteCopied ? '¡Copiado!' : 'Invitar'}
+                </button>
+              )}
+            </div>
+            {/* Fila 2: premios */}
             {canManageAwards && (
               <button
                 onClick={() => navigate(`/torneos/${id}/premios`)}
@@ -1032,26 +1086,7 @@ export default function TournamentProdePage() {
         {/* Fila 2: estado / acciones */}
         {tab !== 'ranking' && (
           <div className="flex items-center justify-between gap-3 pl-11">
-            {tab === 'bonus' ? (
-              bonusRef.current?.isLocked ? (
-                <div className="flex items-center gap-2 text-muted text-sm">
-                  <Lock size={14} />
-                  <span>Bonus cerrado</span>
-                </div>
-              ) : (
-                <>
-                  <span className="text-muted text-xs">Campeón y goleador del torneo</span>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="btn-primary flex items-center gap-2 shrink-0"
-                  >
-                    {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
-                    {saved ? 'Guardado' : 'Guardar'}
-                  </button>
-                </>
-              )
-            ) : !anyUnlocked ? (
+            {!anyUnlocked && tab !== 'bonus' ? (
               <div className="flex items-center gap-2 text-muted text-sm">
                 <Lock size={14} />
                 <span>Predicciones cerradas</span>
@@ -1059,7 +1094,10 @@ export default function TournamentProdePage() {
             ) : (
               <>
                 <span className="text-muted text-xs">
-                  {filledCount}/{unlockedGroupMatches.length} partidos por jugar
+                  {tab === 'bonus'
+                    ? 'Campeón, goleador y más'
+                    : `${filledCount}/${unlockedMatches.length} partidos cargados`
+                  }
                 </span>
                 <button
                   onClick={handleSave}
@@ -1067,7 +1105,7 @@ export default function TournamentProdePage() {
                   className="btn-primary flex items-center gap-2 shrink-0"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
-                  {saved ? 'Guardado' : 'Guardar'}
+                  {saved ? 'Guardado' : 'Guardar todo'}
                 </button>
               </>
             )}
@@ -1146,9 +1184,11 @@ export default function TournamentProdePage() {
         />
       )}
 
-      {/* ── Bonus ── */}
-      {tab === 'bonus' && (
-        <BonusTab ref={bonusRef} tournament={tournament} locked={bonusLocked} />
+      {/* ── Bonus — siempre montado para que bonusRef esté disponible en handleSave ── */}
+      {config?.has_bonus && (
+        <div className={tab !== 'bonus' ? 'hidden' : ''}>
+          <BonusTab ref={bonusRef} tournament={tournament} locked={bonusLocked} />
+        </div>
       )}
 
       {/* ── Ranking ── */}
@@ -1165,6 +1205,9 @@ export default function TournamentProdePage() {
       {teamDetail && (
         <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />
       )}
+
+      {/* ── Toast ── */}
+      {toast && <Toast info={toast} onDismiss={() => setToast(null)} />}
 
     </div>
   )

@@ -162,11 +162,57 @@ Deno.serve(async (req) => {
       }
     })
 
-    const { error } = await supabase
+    // Verificar cuáles ya existen para no pisar match_date
+    const externalIds = rows.map(r => r.external_id)
+    const { data: existing } = await supabase
       .from('competition_matches')
-      .upsert(rows, { onConflict: 'external_id' })
+      .select('external_id')
+      .in('external_id', externalIds)
+    const existingSet = new Set((existing ?? []).map((e: any) => e.external_id))
 
-    if (error) throw error
+    // Nuevos: insertar con todos los campos (incluyendo match_date)
+    const newRows = rows.filter(r => !existingSet.has(r.external_id))
+    // Existentes: solo actualizar scores/status, preservar match_date
+    const scoreRows = rows
+      .filter(r => existingSet.has(r.external_id))
+      .map(r => ({
+        external_id:    r.external_id,
+        home_score:     r.home_score,
+        away_score:     r.away_score,
+        home_penalties: r.home_penalties,
+        away_penalties: r.away_penalties,
+        winner_team_id: r.winner_team_id,
+        status:         r.status,
+        updated_at:     r.updated_at,
+      }))
+
+    if (newRows.length > 0) {
+      const { error: insErr } = await supabase
+        .from('competition_matches')
+        .insert(newRows)
+      if (insErr) throw insErr
+    }
+    if (scoreRows.length > 0) {
+      // Actualizar en lotes de 10 para no saturar conexiones
+      const CHUNK = 10
+      for (let i = 0; i < scoreRows.length; i += CHUNK) {
+        const chunk = scoreRows.slice(i, i + CHUNK)
+        await Promise.all(chunk.map(row =>
+          supabase
+            .from('competition_matches')
+            .update({
+              home_score:     row.home_score,
+              away_score:     row.away_score,
+              home_penalties: row.home_penalties,
+              away_penalties: row.away_penalties,
+              winner_team_id: row.winner_team_id,
+              status:         row.status,
+              updated_at:     row.updated_at,
+            })
+            .eq('external_id', row.external_id)
+        ))
+      }
+    }
 
     const finished = rows.filter(r => ['FT','AET','PEN'].includes(r.status)).length
 
@@ -176,12 +222,12 @@ Deno.serve(async (req) => {
         comp:      comp.name,
         upserted:  rows.length,
         finished,
-        note: `Sync completado. Partidos con resultado: ${finished}/${rows.length}. Usá el SQL de unlock para poder predecir.`,
+        note: `Sync completado. Partidos con resultado: ${finished}/${rows.length}. Las fechas de partidos existentes no fueron modificadas.`,
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error(err)
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
+    return new Response(JSON.stringify({ error: (err as any)?.message ?? String(err) }), { status: 500 })
   }
 })
