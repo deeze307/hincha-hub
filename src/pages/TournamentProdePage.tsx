@@ -18,6 +18,7 @@ import type { ToastInfo } from '../components/molecules/Toast'
 import { fetchTournamentRanking, fetchUserMatchBreakdown } from '../services/rankingService'
 import type { UserMatchBreakdown } from '../services/rankingService'
 import type { Tournament } from '../services/tournamentsService'
+import { teamAbbr } from '../utils/teamUtils'
 import type { CompetitionMatch } from '../services/matchesService'
 import type { BonusPrediction } from '../services/predictionsService'
 import type { TeamOption, PlayerOption } from '../services/teamsService'
@@ -160,7 +161,7 @@ function ScoreBox({
       value={value}
       onChange={e => onChange(e.target.value)}
       disabled={locked}
-      className={`w-10 h-9 text-center text-sm font-semibold bg-elevated border border-border rounded focus:outline-none focus:border-brand disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+      className={`w-9 h-8 text-center text-sm font-semibold bg-elevated border border-border rounded focus:outline-none focus:border-brand disabled:cursor-not-allowed transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
         hasPred ? 'text-orange-400/80' : 'text-text disabled:opacity-40'
       }`}
     />
@@ -179,12 +180,14 @@ function formatPredTime(iso: string): string {
 }
 
 function MatchRow({
-  match, pred, onChange, onTeamClick,
+  match, pred, onChange, onTeamClick, competitionCountry, competitionName,
 }: {
-  match:        CompetitionMatch
-  pred:         ScoreInput
-  onChange:     (home: string, away: string) => void
-  onTeamClick?: (team: TeamRef) => void
+  match:               CompetitionMatch
+  pred:                ScoreInput
+  onChange:            (home: string, away: string) => void
+  onTeamClick?:        (team: TeamRef) => void
+  competitionCountry?: string
+  competitionName?:    string
 }) {
   const locked   = isMatchLocked(match) || pred.is_modified
   const isLate   = isMatchLate(match)
@@ -226,17 +229,20 @@ function MatchRow({
         </div>
       )}
 
-    <div className="flex items-center gap-3 px-3 py-2.5">
+    <div className="flex items-center gap-1.5 px-2 py-2.5">
 
       {/* Equipo local */}
-      <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+      <div className="flex-1 flex items-center justify-end gap-1 min-w-0">
         <button
           type="button"
           onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
-          className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+          className="flex items-center gap-1 min-w-0 hover:opacity-70 transition-opacity"
         >
           <span className={`text-sm font-medium truncate text-right hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
             {match.home_team?.name ?? '—'}
+          </span>
+          <span className={`text-xs font-bold tracking-wide shrink-0 sm:hidden ${isPast ? 'text-muted' : 'text-text'}`}>
+            {match.home_team ? teamAbbr(match.home_team.name, competitionCountry, competitionName) : '—'}
           </span>
           <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
         </button>
@@ -247,7 +253,7 @@ function MatchRow({
         {live && (
           <span className="text-red-500 text-[9px] font-bold uppercase tracking-wider leading-none">VIVO</span>
         )}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <ScoreBox value={pred.home} onChange={v => onChange(v, pred.away)} locked={locked} />
           <span className="text-muted-dark text-xs font-semibold">-</span>
           <ScoreBox value={pred.away} onChange={v => onChange(pred.home, v)} locked={locked} />
@@ -258,21 +264,24 @@ function MatchRow({
       </div>
 
       {/* Equipo visitante */}
-      <div className="flex-1 flex items-center gap-2 min-w-0">
+      <div className="flex-1 flex items-center gap-1 min-w-0">
         <button
           type="button"
           onClick={() => match.away_team && onTeamClick?.({ id: match.away_team.id, name: match.away_team.name, logo_url: match.away_team.logo_url ?? null })}
-          className="flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity"
+          className="flex items-center gap-1 min-w-0 hover:opacity-70 transition-opacity"
         >
           <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
           <span className={`text-sm font-medium truncate hidden sm:block ${isPast ? 'text-muted' : 'text-text'}`}>
             {match.away_team?.name ?? '—'}
           </span>
+          <span className={`text-xs font-bold tracking-wide shrink-0 sm:hidden ${isPast ? 'text-muted' : 'text-text'}`}>
+            {match.away_team ? teamAbbr(match.away_team.name, competitionCountry, competitionName) : '—'}
+          </span>
         </button>
       </div>
 
       {/* Resultado real + pts / fecha */}
-      <div className="shrink-0 w-20 text-right">
+      <div className="shrink-0 w-16 text-right">
         {hasScore ? (
           <div className="flex flex-col items-end gap-0.5">
             <span className={`text-xs font-mono font-semibold ${live ? 'text-red-400' : 'text-muted-dark'}`}>
@@ -1149,6 +1158,8 @@ export default function TournamentProdePage() {
                       pred={predMap.get(m.id) ?? { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                       onChange={(h, a) => setPred(m.id, h, a)}
                       onTeamClick={handleTeamClick}
+                      competitionCountry={tournament?.competition?.country ?? ''}
+                      competitionName={tournament?.competition?.name ?? ''}
                     />
                   ))}
                 </div>
@@ -1181,6 +1192,8 @@ export default function TournamentProdePage() {
           predMap={predMap}
           onPred={setPred}
           onTeamClick={handleTeamClick}
+          competitionCountry={tournament?.competition?.country ?? ''}
+          competitionName={tournament?.competition?.name ?? ''}
         />
       )}
 
@@ -1571,12 +1584,14 @@ function ScoringInfoBanner() {
 // ─── Tab Eliminatoria ─────────────────────────────────────────────
 
 function KnockoutTab({
-  roundsMap, predMap, onPred, onTeamClick,
+  roundsMap, predMap, onPred, onTeamClick, competitionCountry, competitionName,
 }: {
-  roundsMap:    Map<string, CompetitionMatch[]>
-  predMap:      PredMap
-  onPred:       (matchId: string, home: string, away: string) => void
-  onTeamClick?: (team: TeamRef) => void
+  roundsMap:           Map<string, CompetitionMatch[]>
+  predMap:             PredMap
+  onPred:              (matchId: string, home: string, away: string) => void
+  onTeamClick?:        (team: TeamRef) => void
+  competitionCountry?: string
+  competitionName?:    string
 }) {
   if (roundsMap.size === 0) {
     return (
@@ -1616,6 +1631,8 @@ function KnockoutTab({
                     pred={predMap.get(m.id) ?? { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
                     onChange={(h, a) => onPred(m.id, h, a)}
                     onTeamClick={onTeamClick}
+                    competitionCountry={competitionCountry}
+                    competitionName={competitionName}
                   />
                 ))
               }

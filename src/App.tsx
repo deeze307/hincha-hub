@@ -16,6 +16,7 @@ import TournamentProdePage from './pages/TournamentProdePage'
 import TournamentRankingPage from './pages/TournamentRankingPage'
 import AwardResultsPage from './pages/AwardResultsPage'
 import InvitePage from './pages/InvitePage'
+import CompetitionsAdminPage from './pages/CompetitionsAdminPage'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/notificaciones"       element={<NotificationsPage />} />
           <Route path="/perfil"              element={<ProfilePage />} />
           <Route path="/configuracion"        element={<ConfiguracionPage />} />
+          <Route path="/competiciones-admin" element={<CompetitionsAdminPage />} />
           <Route path="/ligas"               element={<Navigate to="/torneos" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

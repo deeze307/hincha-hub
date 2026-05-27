@@ -6,6 +6,7 @@ import { TeamDetailSheet } from '../TeamDetailSheet'
 import { useTeamDetail } from '../../../hooks/useTeamDetail'
 import { fetchUserPredictionsForMatches } from '../../../services/predictionsService'
 import { isLive } from '../../../hooks/useMatchesForDate'
+import { teamAbbr } from '../../../utils/teamUtils'
 import type { TeamDetailInfo } from '../../../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../../../services/dashboardService'
 import type { CompetitionMatch } from '../../../services/matchesService'
@@ -30,10 +31,12 @@ function TeamLogo({ url, name, size = 20 }: { url: string | null; name: string; 
   )
 }
 
-function MatchRow({ match, pred, onTeamClick }: {
-  match:        CompetitionMatch
-  pred?:        MatchPred
-  onTeamClick?: (team: TeamRef) => void
+function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionName }: {
+  match:               CompetitionMatch
+  pred?:               MatchPred
+  onTeamClick?:        (team: TeamRef) => void
+  competitionCountry?: string
+  competitionName?:    string
 }) {
   const live      = isLive(match.status)
   const hasResult = match.home_score != null && match.away_score != null
@@ -56,7 +59,8 @@ function MatchRow({ match, pred, onTeamClick }: {
           onClick={() => match.home_team && onTeamClick?.({ id: match.home_team.id, name: match.home_team.name, logo_url: match.home_team.logo_url ?? null })}
           className="flex items-center gap-1.5 min-w-0 justify-end hover:opacity-70 transition-opacity"
         >
-          <span className="text-text text-xs font-semibold truncate">{match.home_team?.name ?? '—'}</span>
+          <span className="hidden sm:inline text-text text-xs font-semibold truncate">{match.home_team?.name ?? '—'}</span>
+          <span className="sm:hidden text-text text-xs font-bold tracking-wide shrink-0">{match.home_team ? teamAbbr(match.home_team.name, competitionCountry, competitionName) : '—'}</span>
           <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
         </button>
         {pred != null && (
@@ -82,7 +86,8 @@ function MatchRow({ match, pred, onTeamClick }: {
           className="flex items-center gap-1.5 min-w-0 hover:opacity-70 transition-opacity"
         >
           <TeamLogo url={match.away_team?.logo_url ?? null} name={match.away_team?.name ?? '?'} />
-          <span className="text-text text-xs font-semibold truncate">{match.away_team?.name ?? '—'}</span>
+          <span className="hidden sm:inline text-text text-xs font-semibold truncate">{match.away_team?.name ?? '—'}</span>
+          <span className="sm:hidden text-text text-xs font-bold tracking-wide shrink-0">{match.away_team ? teamAbbr(match.away_team.name, competitionCountry, competitionName) : '—'}</span>
         </button>
       </div>
     </div>
@@ -128,10 +133,13 @@ export default function MatchesCard() {
   return (
     <div className="lg:col-span-4 card flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-        <span className="text-muted text-[11px] font-semibold uppercase tracking-widest">Partidos de hoy</span>
+        <div>
+          <span className="text-muted text-[11px] font-semibold uppercase tracking-widest">Partidos de hoy</span>
+          <p className="text-muted-dark text-[9px] mt-0.5">De tus torneos inscriptos</p>
+        </div>
         <button
           onClick={() => navigate('/partidos')}
-          className="text-brand text-xs font-semibold hover:underline"
+          className="text-brand text-xs font-semibold hover:underline shrink-0"
         >
           Ver todos {hasMore && `(+${totalToday - limited.reduce((s, g) => s + g.matches.length, 0)})`}
         </button>
@@ -142,9 +150,18 @@ export default function MatchesCard() {
           <Loader2 size={20} className="text-brand animate-spin" />
         </div>
       ) : limited.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 px-5 text-center gap-1">
+        <div className="flex flex-col items-center justify-center py-8 px-5 text-center gap-2">
           <span className="text-2xl">📅</span>
-          <p className="text-muted text-sm">No hay partidos hoy en tus torneos</p>
+          <p className="text-text text-sm font-medium">Sin partidos hoy en tus torneos</p>
+          <p className="text-muted text-xs leading-snug">
+            Puede haber partidos de competiciones populares disponibles
+          </p>
+          <button
+            onClick={() => navigate('/partidos')}
+            className="mt-1 text-brand text-xs font-semibold hover:underline"
+          >
+            Ver calendario completo →
+          </button>
         </div>
       ) : (
         <div>
@@ -164,6 +181,8 @@ export default function MatchesCard() {
                   match={m}
                   pred={predMap.get(m.id)}
                   onTeamClick={(team) => handleTeamClick(team, m, g.tournamentName)}
+                  competitionCountry={g.competitionCountry}
+                  competitionName={g.tournamentName}
                 />
               ))}
             </div>
