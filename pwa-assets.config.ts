@@ -10,7 +10,7 @@ export default defineConfig({
         background: '#09090F',
         fit: 'contain',
       },
-      padding: 0.3,
+      padding: 0.38,
     },
     apple: {
       sizes: [180],
