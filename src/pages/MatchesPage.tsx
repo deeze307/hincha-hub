@@ -70,7 +70,7 @@ function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionNam
           <TeamLogo url={match.home_team?.logo_url ?? null} name={match.home_team?.name ?? '?'} />
         </button>
         {pred != null && (
-          <span className="text-muted text-[11px] font-mono tabular-nums shrink-0">{pred.home}</span>
+          <span className="text-brand text-[11px] font-mono tabular-nums shrink-0 font-semibold">{pred.home}</span>
         )}
       </div>
 
@@ -84,7 +84,7 @@ function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionNam
       {/* Visitante */}
       <div className="flex items-center gap-1.5 min-w-0">
         {pred != null && (
-          <span className="text-muted text-[11px] font-mono tabular-nums shrink-0">{pred.away}</span>
+          <span className="text-brand text-[11px] font-mono tabular-nums shrink-0 font-semibold">{pred.away}</span>
         )}
         <button
           type="button"
