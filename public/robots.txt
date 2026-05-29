@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /inicio
+Disallow: /torneos
+Disallow: /partidos
+Disallow: /ranking
+Disallow: /perfil
+Disallow: /configuracion
+Disallow: /notificaciones
+Disallow: /solicitudes
+Disallow: /competiciones-admin
+Disallow: /auth
+
+Sitemap: https://hinchahub.com.ar/sitemap.xml

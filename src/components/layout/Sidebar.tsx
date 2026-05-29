@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import logoFull from '../../assets/images/logo2_transparente.png'
 
 const NAV = [
-  { to: '/',             icon: Home,       label: 'Inicio',        adminOnly: false, comingSoon: false },
+  { to: '/inicio',       icon: Home,       label: 'Inicio',        adminOnly: false, comingSoon: false },
   { to: '/torneos',      icon: Trophy,     label: 'Torneos',       adminOnly: false, comingSoon: false },
   { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas',  adminOnly: false, comingSoon: true  },
   { to: '/configuracion',       icon: Settings, label: 'Configuración',        adminOnly: true, comingSoon: false },

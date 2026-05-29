@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import AuthPage from './pages/AuthPage'
+import LandingPage from './pages/LandingPage'
 import HomePage from './pages/HomePage'
 import ProdePage from './pages/ProdePage'
 import RankingsPage from './pages/RankingsPage'
@@ -22,10 +23,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/unirse/:token" element={<InvitePage />} />
         <Route element={<AppLayout />}>
-          <Route index element={<HomePage />} />
+          <Route path="/inicio" element={<HomePage />} />
           <Route path="/torneos"              element={<TournamentsPage />} />
           <Route path="/torneos/nuevo"        element={<TournamentFormPage />} />
           <Route path="/torneos/:id/editar"   element={<TournamentFormPage />} />
@@ -45,7 +47,7 @@ export default function App() {
           <Route path="/competiciones-admin" element={<CompetitionsAdminPage />} />
           <Route path="/ligas"               element={<Navigate to="/torneos" replace />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </BrowserRouter>
   )

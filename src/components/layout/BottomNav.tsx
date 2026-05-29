@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { Home, Trophy, BarChart3, TrendingUp } from 'lucide-react'
 
 const NAV = [
-  { to: '/',             icon: Home,       label: 'Inicio',       comingSoon: false },
+  { to: '/inicio',       icon: Home,       label: 'Inicio',       comingSoon: false },
   { to: '/torneos',      icon: Trophy,     label: 'Torneos',      comingSoon: false },
   { to: '/ranking',      icon: BarChart3,  label: 'Ranking',      comingSoon: true  },
   { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas', comingSoon: true  },
@@ -27,7 +27,7 @@ export default function BottomNav() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/inicio'}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors ${
                 isActive ? 'text-brand' : 'text-muted'

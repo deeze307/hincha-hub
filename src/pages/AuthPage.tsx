@@ -18,7 +18,7 @@ export default function AuthPage() {
   const { signIn, signUp, signInWithGoogle, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const redirectTo = searchParams.get('redirect') ?? '/'
+  const redirectTo = searchParams.get('redirect') ?? '/inicio'
 
   useEffect(() => {
     if (user) navigate(redirectTo, { replace: true })
