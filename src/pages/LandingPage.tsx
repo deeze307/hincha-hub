@@ -96,8 +96,8 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tight mb-5">
-            El punto de encuentro{' '}
-            <span className="text-brand">del deporte</span>
+            Donde compiten{' '}
+            <span className="text-brand">los Hinchas</span>
           </h1>
 
           <p className="text-muted text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-8">
@@ -147,14 +147,20 @@ export default function LandingPage() {
                 <div className="bg-surface rounded-xl p-3">
                   <p className="text-[9px] text-muted font-bold uppercase tracking-widest mb-2">Partidos de hoy</p>
                   {[
-                    { h: 'ARG', a: 'BRA', ph: 2, pa: 1 },
-                    { h: 'ESP', a: 'ING', ph: 1, pa: 1 },
+                    { h: 'ARG', hLogo: 'https://media.api-sports.io/football/teams/26.png',  a: 'BRA', aLogo: 'https://media.api-sports.io/football/teams/6.png', ph: 2, pa: 1 },
+                    { h: 'ESP', hLogo: 'https://media.api-sports.io/football/teams/9.png',   a: 'ING', aLogo: 'https://media.api-sports.io/football/teams/10.png', ph: 1, pa: 1 },
                   ].map((m, i) => (
                     <div key={i} className="flex items-center gap-1 py-1.5 border-b border-border/30 last:border-0 text-[10px]">
                       <span className="w-6 text-center text-muted-dark">19:00</span>
-                      <span className="flex-1 text-right font-semibold">{m.h}</span>
+                      <div className="flex-1 flex items-center justify-end gap-1">
+                        <span className="font-semibold">{m.h}</span>
+                        <img src={m.hLogo} alt={m.h} className="w-4 h-4 object-contain" />
+                      </div>
                       <span className="mx-1 px-2 py-0.5 bg-elevated rounded font-bold text-brand">{m.ph}-{m.pa}</span>
-                      <span className="flex-1 font-semibold">{m.a}</span>
+                      <div className="flex-1 flex items-center gap-1">
+                        <img src={m.aLogo} alt={m.a} className="w-4 h-4 object-contain" />
+                        <span className="font-semibold">{m.a}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -283,6 +289,29 @@ export default function LandingPage() {
             <span className="text-green-400 font-semibold">Verde</span> = +24h antes del partido ·{' '}
             <span className="text-orange-400 font-semibold">Naranja</span> = menos de 24h
           </p>
+
+          {/* Bonus */}
+          <div className="mt-5 pt-5 border-t border-border">
+            <p className="text-xs font-semibold text-text mb-3">
+              🏅 Puntos Bonus — en torneos seleccionados
+            </p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {[
+                'Campeón de la competencia',
+                'Goleador',
+                'Más asistencias',
+                'MVP',
+                'Mejor Arquero',
+              ].map(b => (
+                <span key={b} className="bg-brand/10 border border-brand/20 text-brand text-[11px] font-medium px-3 py-1 rounded-full">
+                  {b}
+                </span>
+              ))}
+            </div>
+            <p className="text-muted-dark text-[11px] mt-3 text-center">
+              Elegí hasta 3 opciones por premio · 1ª opción <span className="text-text font-semibold">+10 pts</span> · 2ª <span className="text-text font-semibold">+5 pts</span> · 3ª <span className="text-text font-semibold">+3 pts</span>
+            </p>
+          </div>
         </div>
       </section>
 
