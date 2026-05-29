@@ -33,10 +33,15 @@ interface FormState {
   team_type:           'national' | 'club'
   direct_qualifiers:   string
   best_third_count:    string
-  has_knockout:  boolean
-  has_bonus:     boolean
-  bonus_types:   BonusType[]
-  is_hidden:     boolean
+  has_knockout:        boolean
+  has_bonus:           boolean
+  bonus_types:         BonusType[]
+  is_hidden:           boolean
+  // costo de ingreso
+  has_entry_fee:       boolean
+  entry_fee:           string
+  entry_fee_alias:     string
+  entry_fee_phone:     string
 }
 
 const INITIAL: FormState = {
@@ -47,10 +52,14 @@ const INITIAL: FormState = {
   team_type: 'national',
   direct_qualifiers: '2',
   best_third_count: '0',
-  has_knockout:  true,
-  has_bonus:     true,
-  bonus_types:   ['champion', 'top_scorer'] as BonusType[],
-  is_hidden:     false,
+  has_knockout:    true,
+  has_bonus:       true,
+  bonus_types:     ['champion', 'top_scorer'] as BonusType[],
+  is_hidden:       false,
+  has_entry_fee:   false,
+  entry_fee:       '',
+  entry_fee_alias: '',
+  entry_fee_phone: '',
 }
 
 export default function TournamentFormPage() {
@@ -107,6 +116,10 @@ export default function TournamentFormPage() {
       has_bonus:           pc.has_bonus ?? true,
       bonus_types:         pc.bonus_types ?? ['champion', 'top_scorer'],
       is_hidden:           t.is_hidden ?? false,
+      has_entry_fee:       t.entry_fee != null && t.entry_fee > 0,
+      entry_fee:           t.entry_fee?.toString() ?? '',
+      entry_fee_alias:     t.entry_fee_alias ?? '',
+      entry_fee_phone:     t.entry_fee_phone ?? '',
     })
   }
 
@@ -154,6 +167,20 @@ export default function TournamentFormPage() {
       setError('Indicá cuántos equipos clasifican directamente por grupo (mínimo 1)')
       return
     }
+    if (form.has_entry_fee) {
+      if (!form.entry_fee || parseInt(form.entry_fee) <= 0) {
+        setError('Ingresá el costo de ingreso'); return
+      }
+      if (!form.entry_fee_alias.trim()) {
+        setError('Ingresá el alias para la transferencia'); return
+      }
+      if (!form.entry_fee_phone.trim()) {
+        setError('Ingresá el número de teléfono de contacto'); return
+      }
+      if (form.entry_fee_phone.trim().startsWith('0')) {
+        setError('El teléfono no debe empezar con 0 (ingresalo sin el 0 y sin el 15)'); return
+      }
+    }
 
     const prodeConfig: ProdeConfig = {
       direct_qualifiers: parseInt(form.direct_qualifiers),
@@ -168,11 +195,11 @@ export default function TournamentFormPage() {
     try {
       if (isEdit && id) {
         await updateTournament(id, {
-          name:         form.name,
-          description:  form.description,
-          image_file:   form.image_file,
-          image_url:    form.image_url,
-          is_hidden:    isSuperAdmin ? form.is_hidden : undefined,
+          name:             form.name,
+          description:      form.description,
+          image_file:       form.image_file,
+          image_url:        form.image_url,
+          is_hidden:        isSuperAdmin ? form.is_hidden : undefined,
           prode_config: {
             direct_qualifiers: parseInt(form.direct_qualifiers),
             best_third_count:  parseInt(form.best_third_count) || 0,
@@ -181,6 +208,9 @@ export default function TournamentFormPage() {
             bonus_types:       form.has_bonus ? form.bonus_types : [],
             tiebreakers:       ['points', 'gd', 'gf', 'h2h'],
           },
+          entry_fee:        form.has_entry_fee ? parseInt(form.entry_fee) : null,
+          entry_fee_alias:  form.has_entry_fee ? form.entry_fee_alias.trim() : null,
+          entry_fee_phone:  form.has_entry_fee ? form.entry_fee_phone.trim() : null,
         })
       } else {
         await createTournament({
@@ -193,6 +223,9 @@ export default function TournamentFormPage() {
           team_type:           form.team_type,
           prode_config:        prodeConfig,
           prediction_deadline: null,
+          entry_fee:           form.has_entry_fee ? parseInt(form.entry_fee) : null,
+          entry_fee_alias:     form.has_entry_fee ? form.entry_fee_alias.trim() : null,
+          entry_fee_phone:     form.has_entry_fee ? form.entry_fee_phone.trim() : null,
         })
         // Sync automático en background: equipos + fixture + jugadores
         // No esperamos para no bloquear al usuario
@@ -409,6 +442,67 @@ export default function TournamentFormPage() {
             />
           )}
         </div>
+
+        {/* ── Costo de ingreso (solo si access_type = request) ── */}
+        {form.access_type === 'request' && (
+          <div className="border border-border rounded-xl overflow-hidden">
+            <div className="bg-elevated px-5 py-3 border-b border-border">
+              <h2 className="text-text text-sm font-semibold">Costo de ingreso</h2>
+              <p className="text-muted-dark text-xs mt-0.5">
+                Si el torneo tiene un costo, el usuario verá los datos de pago al solicitar el ingreso
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <ToggleRow
+                label="Cobrar ingreso"
+                description="Activá si los participantes deben pagar para ingresar"
+                value={form.has_entry_fee}
+                onChange={v => set({ has_entry_fee: v })}
+              />
+              {form.has_entry_fee && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="label">Costo *</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm font-medium">$</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Ej: 5.000"
+                        value={form.entry_fee ? parseInt(form.entry_fee).toLocaleString('es-AR') : ''}
+                        onChange={e => set({ entry_fee: e.target.value.replace(/\D/g, '') })}
+                        className="input pl-7"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="label">Alias para transferencia *</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: pepe.garcia.mp"
+                      value={form.entry_fee_alias}
+                      onChange={e => set({ entry_fee_alias: e.target.value })}
+                      className="input"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="label">Teléfono para enviar comprobante *</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 1155667788"
+                      value={form.entry_fee_phone}
+                      onChange={e => set({ entry_fee_phone: e.target.value })}
+                      className="input"
+                    />
+                    <p className="text-muted-dark text-[11px]">
+                      Agregalo sin el 0 y sin el 15 (ej: 1155667788)
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ════════════════════════════════════════
             SECCIÓN PRODE (solo en creación)

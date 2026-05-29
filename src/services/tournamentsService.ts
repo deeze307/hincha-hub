@@ -49,6 +49,9 @@ export interface Tournament {
   created_at:          string
   updated_at:          string
   is_hidden:           boolean
+  entry_fee:           number | null
+  entry_fee_alias:     string | null
+  entry_fee_phone:     string | null
   // joins
   competition?:    { name: string; logo_url: string | null; country: string } | null
   participant_count?: number
@@ -66,15 +69,21 @@ export interface CreateTournamentData {
   team_type:           'national' | 'club'
   prode_config:        ProdeConfig
   prediction_deadline: string | null
+  entry_fee:           number | null
+  entry_fee_alias:     string | null
+  entry_fee_phone:     string | null
 }
 
 export interface UpdateTournamentData {
-  name:         string
-  description:  string
-  image_file:   File | null
-  image_url:    string | null
-  is_hidden?:   boolean
-  prode_config?: ProdeConfig
+  name:             string
+  description:      string
+  image_file:       File | null
+  image_url:        string | null
+  is_hidden?:       boolean
+  prode_config?:    ProdeConfig
+  entry_fee?:       number | null
+  entry_fee_alias?: string | null
+  entry_fee_phone?: string | null
 }
 
 export async function fetchTournaments(): Promise<Tournament[]> {
@@ -87,6 +96,7 @@ export async function fetchTournaments(): Promise<Tournament[]> {
       max_participants, status, created_by, competition_id,
       team_type, prode_config, prediction_deadline,
       created_at, updated_at, is_hidden,
+      entry_fee, entry_fee_alias, entry_fee_phone,
       competition:competitions(name, logo_url, country, season_year),
       participant_count:tournament_registrations(count)
     `)
@@ -177,6 +187,9 @@ export async function createTournament(data: CreateTournamentData): Promise<Tour
       team_type:           data.team_type,
       prode_config:        data.prode_config,
       prediction_deadline: data.prediction_deadline,
+      entry_fee:           data.entry_fee,
+      entry_fee_alias:     data.entry_fee_alias,
+      entry_fee_phone:     data.entry_fee_phone,
     })
     .select()
     .single()
@@ -207,8 +220,11 @@ export async function updateTournament(id: string, data: UpdateTournamentData): 
     image_url,
     updated_at:  new Date().toISOString(),
   }
-  if (data.is_hidden    !== undefined) patch.is_hidden    = data.is_hidden
-  if (data.prode_config !== undefined) patch.prode_config = data.prode_config
+  if (data.is_hidden        !== undefined) patch.is_hidden        = data.is_hidden
+  if (data.prode_config     !== undefined) patch.prode_config     = data.prode_config
+  if (data.entry_fee        !== undefined) patch.entry_fee        = data.entry_fee
+  if (data.entry_fee_alias  !== undefined) patch.entry_fee_alias  = data.entry_fee_alias
+  if (data.entry_fee_phone  !== undefined) patch.entry_fee_phone  = data.entry_fee_phone
 
   const { error } = await supabase
     .from('tournaments')

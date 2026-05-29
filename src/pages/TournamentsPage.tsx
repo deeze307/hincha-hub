@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock } from 'lucide-react'
+import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock, Info } from 'lucide-react'
 import { fetchTournaments, joinTournament, requestJoinTournament } from '../services/tournamentsService'
 import type { Tournament } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
@@ -25,6 +25,18 @@ export default function TournamentsPage() {
   const [loading, setLoading]         = useState(true)
   const [tab, setTab]                 = useState<Tab>('all')
   const [joining, setJoining]         = useState<string | null>(null)
+  const [joinModal, setJoinModal]     = useState<Tournament | null>(null)
+  const [modalVisible, setModalVisible] = useState(false)
+
+  function openModal(t: Tournament) {
+    setJoinModal(t)
+    setTimeout(() => setModalVisible(true), 10)
+  }
+
+  function closeModal() {
+    setModalVisible(false)
+    setTimeout(() => setJoinModal(null), 300)
+  }
   const [showSyncBanner, setShowSyncBanner] = useState(
     () => (location.state as any)?.justCreated === true
   )
@@ -62,6 +74,7 @@ export default function TournamentsPage() {
         await joinTournament(t.id)
       } else {
         await requestJoinTournament(t.id)
+        openModal(t)
       }
       await load()
     } finally {
@@ -138,8 +151,50 @@ export default function TournamentsPage() {
               onJoin={() => handleJoin(t)}
               onManage={() => navigate(`/torneos/${t.id}/editar`)}
               onProde={() => navigate(`/torneos/${t.id}/prode`)}
+              onShowInfo={() => openModal(t)}
             />
           ))}
+        </div>
+      )}
+      {/* Modal post-solicitud */}
+      {joinModal && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${modalVisible ? 'opacity-100' : 'opacity-0'}`}
+          onClick={closeModal}
+        >
+          <div
+            className={`bg-surface border border-border rounded-2xl p-6 w-full max-w-md transition-all duration-300 ease-out ${modalVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-text font-semibold text-[15px] mb-3">Solicitud enviada</h2>
+            {joinModal.entry_fee ? (
+              <p className="text-muted text-sm leading-relaxed">
+                Solicitaste ingresar al torneo{' '}
+                <span className="text-text font-semibold">'{joinModal.name}'</span>, este mismo tiene un costo de{' '}
+                <span className="text-brand font-semibold">${joinModal.entry_fee.toLocaleString('es-AR')}</span>{' '}
+                el cual deberá ser abonado en efectivo o transferencia al Alias{' '}
+                <span className="text-text font-semibold">{joinModal.entry_fee_alias}</span>.
+                <br /><br />
+                Una vez que realices el pago, enviá el comprobante a{' '}
+                <span className="text-text font-semibold">{joinModal.entry_fee_phone}</span>{' '}
+                para notificarle al administrador del grupo que ya pagaste y te autorice el ingreso.
+              </p>
+            ) : (
+              <p className="text-muted text-sm leading-relaxed">
+                Solicitaste ingresar al torneo{' '}
+                <span className="text-text font-semibold">'{joinModal.name}'</span>.
+                Ya le notificamos al administrador de tu solicitud, así que cuando la acepte vas a poder ingresar al torneo.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={closeModal}
+                className="btn-primary w-full"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -154,9 +209,10 @@ interface CardProps {
   onJoin:        () => void
   onManage:      () => void
   onProde:       () => void
+  onShowInfo:    () => void
 }
 
-function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, onJoin, onManage, onProde }: CardProps) {
+function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, onJoin, onManage, onProde, onShowInfo }: CardProps) {
   const isOwner   = t.created_by === currentUserId
   const canManage = isOwner || isSuperAdmin
   const participantN = typeof t.participant_count === 'number' ? t.participant_count : 0
@@ -222,7 +278,13 @@ function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, o
               Ver Prode <ChevronRight size={13} />
             </button>
           ) : t.has_pending_request ? (
-            <span className="block w-full text-center text-xs text-yellow-400 font-semibold py-2">Solicitud enviada</span>
+            <button
+              onClick={onShowInfo}
+              className="flex items-center justify-center gap-1.5 w-full text-xs text-yellow-400 font-semibold py-2 hover:text-yellow-300 transition-colors"
+            >
+              Solicitud enviada
+              <Info size={14} className="shrink-0" />
+            </button>
           ) : isFull ? (
             <span className="block w-full text-center text-xs text-muted py-2">Torneo lleno</span>
           ) : (
