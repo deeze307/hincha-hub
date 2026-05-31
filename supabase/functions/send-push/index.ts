@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import webpush from 'npm:web-push'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +28,7 @@ Deno.serve(async (req: Request) => {
       })
     }
 
+    const webpush = (await import('npm:web-push')).default
     webpush.setVapidDetails(
       `mailto:${Deno.env.get('VAPID_EMAIL')}`,
       Deno.env.get('VAPID_PUBLIC_KEY')!,
