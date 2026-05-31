@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Target, Users, Megaphone, ChevronLeft, ChevronRight, CheckCheck, Bell, BellOff } from 'lucide-react'
+import { Search, Target, Users, Megaphone, ChevronLeft, ChevronRight, CheckCheck, Bell, BellOff, Send } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { fetchNotificationsPage, markNotificationRead, markAllNotificationsRead } from '../services/notificationsService'
 import { useNotificationsStore } from '../store/useNotificationsStore'
 import type { Notification } from '../store/useNotificationsStore'
 import { usePushNotifications } from '../hooks/usePushNotifications'
+import { useAuth } from '../contexts/AuthContext'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
 
@@ -29,6 +31,9 @@ function formatDate(iso: string) {
 export default function NotificationsPage() {
   const { fetch: refreshBell } = useNotificationsStore()
   const push = usePushNotifications()
+  const { profile } = useAuth()
+  const navigate = useNavigate()
+  const isSuperAdmin = profile?.role === 'superadmin'
 
   const [rows, setRows]           = useState<Notification[]>([])
   const [total, setTotal]         = useState(0)
@@ -113,15 +118,26 @@ export default function NotificationsPage() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-text text-xl font-semibold tracking-tight">Notificaciones</h1>
-        {unreadOnPage > 0 && (
-          <button
-            onClick={handleMarkAllRead}
-            className="btn-ghost flex items-center gap-2 text-[13px]"
-          >
-            <CheckCheck size={15} />
-            Marcar todas como leídas
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && (
+            <button
+              onClick={() => navigate('/notificaciones-admin')}
+              className="btn-secondary flex items-center gap-2 text-[13px]"
+            >
+              <Send size={13} />
+              Enviar notificación
+            </button>
+          )}
+          {unreadOnPage > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="btn-ghost flex items-center gap-2 text-[13px]"
+            >
+              <CheckCheck size={15} />
+              Marcar todas como leídas
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Buscador + selector de página */}
