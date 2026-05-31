@@ -28,7 +28,7 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const webpush = (await import('npm:web-push')).default
+    const webpush = (await import('https://esm.sh/web-push@3.6.7')).default
     webpush.setVapidDetails(
       `mailto:${Deno.env.get('VAPID_EMAIL')}`,
       Deno.env.get('VAPID_PUBLIC_KEY')!,
@@ -40,25 +40,26 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Construir query de suscripciones según el modo
-    let subsQuery = supabase
-      .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth, profiles!inner(push_enabled)')
+    // 1. Obtener usuarios con push_enabled = true
+    let profilesQuery = supabase.from('profiles').select('id').eq('push_enabled', true)
+    if (!broadcast) {
+      const targetIds = user_ids?.length ? user_ids : [user_id]
+      profilesQuery = profilesQuery.in('id', targetIds)
+    }
+    const { data: enabledProfiles } = await profilesQuery
+    const enabledIds = (enabledProfiles ?? []).map((p: any) => p.id)
 
-    if (broadcast) {
-      // todos los que tengan push_enabled = true
-      subsQuery = subsQuery.eq('profiles.push_enabled', true)
-    } else if (user_ids?.length) {
-      subsQuery = subsQuery
-        .in('user_id', user_ids)
-        .eq('profiles.push_enabled', true)
-    } else {
-      subsQuery = subsQuery
-        .eq('user_id', user_id)
-        .eq('profiles.push_enabled', true)
+    if (!enabledIds.length) {
+      return new Response(JSON.stringify({ sent: 0, total: 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    const { data: subs, error } = await subsQuery
+    // 2. Obtener suscripciones de esos usuarios
+    const { data: subs, error } = await supabase
+      .from('push_subscriptions')
+      .select('user_id, endpoint, p256dh, auth')
+      .in('user_id', enabledIds)
 
     if (error) throw error
     if (!subs?.length) {
@@ -94,7 +95,11 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
+    const message = err instanceof Error
+      ? err.message
+      : typeof err === 'object' ? JSON.stringify(err) : String(err)
+    console.error('send-push error:', err)
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

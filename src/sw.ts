@@ -48,7 +48,7 @@ self.addEventListener('push', (event: PushEvent) => {
     self.registration.showNotification(title, {
       body,
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      badge: '/isotipo.png',
       data: { url: url ?? '/' },
     })
   )

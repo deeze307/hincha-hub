@@ -235,17 +235,25 @@ Deno.serve(async () => {
         byUser.set(r.user_id, entry)
       }
 
-      // Obtener suscripciones de esos usuarios (con push_enabled)
+      // Obtener usuarios con push_enabled = true
       const notifyUserIds = [...byUser.keys()]
-      const { data: pushSubs } = await supabase
-        .from('push_subscriptions')
-        .select('user_id, endpoint, p256dh, auth, profiles!inner(push_enabled)')
-        .in('user_id', notifyUserIds)
-        .eq('profiles.push_enabled', true)
+      const { data: enabledProfiles } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('push_enabled', true)
+        .in('id', notifyUserIds)
+      const enabledIds = (enabledProfiles ?? []).map((p: any) => p.id)
+
+      const { data: pushSubs } = enabledIds.length
+        ? await supabase
+            .from('push_subscriptions')
+            .select('user_id, endpoint, p256dh, auth')
+            .in('user_id', enabledIds)
+        : { data: [] }
 
       if (pushSubs?.length) {
         // Importar web-push dinámicamente
-        const webpush = (await import('npm:web-push')).default
+        const webpush = (await import('https://esm.sh/web-push@3.6.7')).default
         webpush.setVapidDetails(
           `mailto:${Deno.env.get('VAPID_EMAIL')}`,
           Deno.env.get('VAPID_PUBLIC_KEY')!,
