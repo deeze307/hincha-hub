@@ -1,11 +1,12 @@
 import { useEffect, useState }  from 'react'
 import { useNavigate }          from 'react-router-dom'
-import { Trophy }               from 'lucide-react'
+import { Trophy, Bell, X }      from 'lucide-react'
 import MatchesCard              from '../components/organisms/dashboard/MatchesCard'
 import MyTournamentsCard        from '../components/organisms/dashboard/MyTournamentsCard'
 import { useAuth }              from '../contexts/AuthContext'
 import { fetchMyTournamentPositions } from '../services/rankingService'
 import type { MyTournamentPosition }  from '../services/rankingService'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 export default function HomePage() {
   const { profile } = useAuth()
@@ -14,6 +15,16 @@ export default function HomePage() {
 
   const [positions, setPositions]         = useState<MyTournamentPosition[]>([])
   const [tournamentsLoading, setTLoading] = useState(true)
+  const [pushDismissed, setPushDismissed] = useState(
+    () => localStorage.getItem('push-banner-dismissed') === '1'
+  )
+
+  const push = usePushNotifications()
+
+  function dismissPushBanner() {
+    localStorage.setItem('push-banner-dismissed', '1')
+    setPushDismissed(true)
+  }
 
   useEffect(() => {
     fetchMyTournamentPositions(5)
@@ -28,6 +39,32 @@ export default function HomePage() {
       <h1 className="text-text text-xl font-semibold tracking-tight">
         Hola, {firstName}!
       </h1>
+
+      {/* Banner de activación push */}
+      {push.isSupported && !push.subscribed && push.permission !== 'denied' && !pushDismissed && (
+        <div className="flex items-center gap-3 bg-brand/10 border border-brand/25 rounded-xl px-4 py-3">
+          <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center shrink-0">
+            <Bell size={15} className="text-brand" />
+          </div>
+          <p className="flex-1 text-sm text-text leading-snug">
+            <span className="font-semibold">Activá las notificaciones</span>
+            <span className="text-muted"> para recibir alertas de partidos, puntos y más.</span>
+          </p>
+          <button
+            onClick={push.subscribe}
+            disabled={push.loading}
+            className="btn-primary text-xs py-1.5 px-3 shrink-0"
+          >
+            {push.loading ? '...' : 'Activar'}
+          </button>
+          <button
+            onClick={dismissPushBanner}
+            className="text-muted hover:text-text transition-colors shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Banner sin torneos */}
       {noTournaments && (

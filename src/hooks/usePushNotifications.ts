@@ -53,11 +53,14 @@ export function usePushNotifications() {
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       })
 
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
       const json  = sub.toJSON()
       const keys  = json.keys as { p256dh: string; auth: string }
 
       await supabase.from('push_subscriptions').upsert(
-        { endpoint: json.endpoint!, p256dh: keys.p256dh, auth: keys.auth },
+        { user_id: user.id, endpoint: json.endpoint!, p256dh: keys.p256dh, auth: keys.auth },
         { onConflict: 'user_id,endpoint' }
       )
 
