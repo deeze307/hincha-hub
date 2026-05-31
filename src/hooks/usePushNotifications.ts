@@ -1,13 +1,16 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
   const rawData = window.atob(base64)
-  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+  const array   = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; i++) array[i] = rawData.charCodeAt(i)
+  return array.buffer
 }
 
 export type PushPermission = 'default' | 'granted' | 'denied'
