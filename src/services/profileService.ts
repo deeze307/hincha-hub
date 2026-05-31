@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 
+export async function updatePushEnabled(userId: string, enabled: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ push_enabled: enabled })
+    .eq('id', userId)
+  if (error) throw new Error(error.message)
+}
+
 export async function updateAlias(userId: string, alias: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')

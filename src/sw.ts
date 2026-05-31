@@ -36,3 +36,36 @@ setCatchHandler(async ({ request }: { request: Request }) => {
   }
   return Response.error()
 })
+
+// ── Push notifications ──────────────────────────────────────────────────────
+
+self.addEventListener('push', (event: PushEvent) => {
+  if (!event.data) return
+  const { title, body, url } = event.data.json() as {
+    title: string; body: string; url?: string
+  }
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: url ?? '/' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close()
+  const url = event.notification.data?.url ?? '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      const existing = clients.find(c => c.url.includes(self.location.origin))
+      if (existing) {
+        existing.focus()
+        existing.navigate(url)
+      } else {
+        self.clients.openWindow(url)
+      }
+    })
+  )
+})

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Target, Users, Megaphone, ChevronLeft, ChevronRight, CheckCheck } from 'lucide-react'
+import { Search, Target, Users, Megaphone, ChevronLeft, ChevronRight, CheckCheck, Bell, BellOff } from 'lucide-react'
 import { fetchNotificationsPage, markNotificationRead, markAllNotificationsRead } from '../services/notificationsService'
 import { useNotificationsStore } from '../store/useNotificationsStore'
 import type { Notification } from '../store/useNotificationsStore'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
 
@@ -27,6 +28,7 @@ function formatDate(iso: string) {
 
 export default function NotificationsPage() {
   const { fetch: refreshBell } = useNotificationsStore()
+  const push = usePushNotifications()
 
   const [rows, setRows]           = useState<Notification[]>([])
   const [total, setTotal]         = useState(0)
@@ -85,6 +87,55 @@ export default function NotificationsPage() {
 
   return (
     <div className="p-6 space-y-5 max-w-4xl">
+      {/* Banner de notificaciones push */}
+      {push.isSupported && push.permission !== 'denied' && (
+        <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+          push.subscribed
+            ? 'border-green-500/30 bg-green-500/10'
+            : 'border-brand/30 bg-brand/10'
+        }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+            push.subscribed ? 'bg-green-500/20' : 'bg-brand/20'
+          }`}>
+            {push.subscribed
+              ? <Bell size={15} className="text-green-400" />
+              : <BellOff size={15} className="text-brand" />
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-text">
+              {push.subscribed ? 'Notificaciones push activadas' : 'Activá las notificaciones push'}
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              {push.subscribed
+                ? 'Vas a recibir alertas aunque la app esté cerrada'
+                : 'Recibí alertas de solicitudes, resultados y más aunque la app esté cerrada'
+              }
+            </p>
+          </div>
+          <button
+            onClick={push.subscribed ? push.unsubscribe : push.subscribe}
+            disabled={push.loading}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors ${
+              push.subscribed
+                ? 'text-muted hover:text-red-400 hover:bg-red-500/10'
+                : 'btn-primary py-1.5 px-3'
+            }`}
+          >
+            {push.loading ? '...' : push.subscribed ? 'Desactivar' : 'Activar'}
+          </button>
+        </div>
+      )}
+
+      {push.isSupported && push.permission === 'denied' && (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-4 py-3">
+          <BellOff size={15} className="text-muted shrink-0" />
+          <p className="text-xs text-muted">
+            Bloqueaste los permisos de notificaciones. Para activarlas, habilitá el permiso manualmente desde la configuración del navegador.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-text text-xl font-semibold tracking-tight">Notificaciones</h1>
         {unreadOnPage > 0 && (

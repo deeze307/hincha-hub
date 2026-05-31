@@ -88,10 +88,10 @@ Deno.serve(async () => {
     const matchIds  = matches.map((m: any) => m.id)
     const matchMap  = new Map(matches.map((m: any) => [m.id, m]))
 
-    // 3. Predicciones completadas, incluyendo predicted_at
+    // 3. Predicciones completadas, incluyendo predicted_at y estado previo de notificación
     const { data: preds, error: pErr } = await supabase
       .from('match_predictions')
-      .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at')
+      .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at, push_notified')
       .in('match_id', matchIds)
       .not('home_prediction', 'is', null)
       .not('away_prediction', 'is', null)
@@ -207,6 +207,75 @@ Deno.serve(async () => {
         if (buErr) throw buErr
         bonusUpdated = bonusRows.length
       }
+    }
+
+    // ── Push notifications por puntos ──────────────────────────────────────
+    // Solo predicciones que aún no fueron notificadas y que ganaron puntos
+    const toNotify = rows.filter((r: any) => r.points_earned > 0 && !preds.find((p: any) => p.id === r.id)?.push_notified)
+
+    if (toNotify.length > 0) {
+      // Enriquecer con nombres de equipos
+      const notifyMatchIds = [...new Set(toNotify.map((r: any) => r.match_id))]
+      const { data: matchDetails } = await supabase
+        .from('competition_matches')
+        .select('id, home_team_name, away_team_name')
+        .in('id', notifyMatchIds)
+
+      const matchDetailMap = new Map((matchDetails ?? []).map((m: any) => [m.id, m]))
+
+      // Agrupar puntos por usuario
+      const byUser = new Map<string, { pts: number; matches: string[] }>()
+      for (const r of toNotify) {
+        const entry = byUser.get(r.user_id) ?? { pts: 0, matches: [] }
+        entry.pts += r.points_earned
+        const md = matchDetailMap.get(r.match_id)
+        if (md?.home_team_name && md?.away_team_name) {
+          entry.matches.push(`${md.home_team_name} vs ${md.away_team_name}`)
+        }
+        byUser.set(r.user_id, entry)
+      }
+
+      // Obtener suscripciones de esos usuarios (con push_enabled)
+      const notifyUserIds = [...byUser.keys()]
+      const { data: pushSubs } = await supabase
+        .from('push_subscriptions')
+        .select('user_id, endpoint, p256dh, auth, profiles!inner(push_enabled)')
+        .in('user_id', notifyUserIds)
+        .eq('profiles.push_enabled', true)
+
+      if (pushSubs?.length) {
+        // Importar web-push dinámicamente
+        const webpush = (await import('npm:web-push')).default
+        webpush.setVapidDetails(
+          `mailto:${Deno.env.get('VAPID_EMAIL')}`,
+          Deno.env.get('VAPID_PUBLIC_KEY')!,
+          Deno.env.get('VAPID_PRIVATE_KEY')!,
+        )
+
+        await Promise.allSettled(
+          pushSubs.map((sub: any) => {
+            const { pts, matches } = byUser.get(sub.user_id)!
+            const matchText = matches.length === 1
+              ? `tu predicción de ${matches[0]}`
+              : `${matches.length} predicciones`
+            return webpush.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              JSON.stringify({
+                title: `¡Sumaste ${pts} punto${pts !== 1 ? 's' : ''}!`,
+                body:  `Por ${matchText}`,
+                url:   '/partidos',
+              }),
+            )
+          })
+        )
+      }
+
+      // Marcar predicciones como notificadas
+      const notifyIds = toNotify.map((r: any) => r.id)
+      await supabase
+        .from('match_predictions')
+        .update({ push_notified: true })
+        .in('id', notifyIds)
     }
 
     return new Response(

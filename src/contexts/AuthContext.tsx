@@ -5,12 +5,13 @@ import { supabase } from '../lib/supabase'
 export type UserRole = 'user' | 'admin' | 'superadmin'
 
 export interface Profile {
-  id:         string
-  username:   string | null
-  full_name:  string | null
-  alias:      string | null
-  avatar_url: string | null
-  role:       UserRole
+  id:           string
+  username:     string | null
+  full_name:    string | null
+  alias:        string | null
+  avatar_url:   string | null
+  role:         UserRole
+  push_enabled: boolean
 }
 
 /** Alias → full_name → username → email prefix → 'Usuario' */
@@ -46,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function fetchProfile(userId: string): Promise<Profile | null> {
     const { data } = await supabase
       .from('profiles')
-      .select('id, username, full_name, alias, avatar_url, role')
+      .select('id, username, full_name, alias, avatar_url, role, push_enabled')
       .eq('id', userId)
       .single()
     return data as Profile | null

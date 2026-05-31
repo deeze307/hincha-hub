@@ -204,6 +204,18 @@ export async function createTournament(data: CreateTournamentData): Promise<Tour
   // Disparar sync-fixtures en background sin bloquear la respuesta
   supabase.functions.invoke('sync-fixtures').catch(() => {})
 
+  // Notificar a todos si el torneo es abierto
+  if (data.access_type === 'open') {
+    supabase.functions.invoke('send-push', {
+      body: {
+        broadcast: true,
+        title: '¡Nuevo torneo disponible!',
+        body: `"${data.name.trim()}" ya está abierto. ¡Uníte!`,
+        url: '/torneos',
+      },
+    }).catch(() => {})
+  }
+
   return created as Tournament
 }
 

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Trophy, Zap, Users, Loader2, Camera, Flame, Pencil } from 'lucide-react'
+import { Trophy, Zap, Users, Loader2, Camera, Flame, Pencil, Bell } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, getDisplayName } from '../contexts/AuthContext'
 import { fetchMyTournamentPositions } from '../services/rankingService'
-import { uploadAvatar, fetchUserStreaks, updateAlias } from '../services/profileService'
+import { uploadAvatar, fetchUserStreaks, updateAlias, updatePushEnabled } from '../services/profileService'
 import type { MyTournamentPosition } from '../services/rankingService'
 
 function medalFor(rank: number): string {
@@ -34,6 +34,7 @@ export default function ProfilePage() {
   const [aliasValue,     setAliasValue]     = useState('')
   const [aliasSaving,    setAliasSaving]    = useState(false)
   const [aliasError,     setAliasError]     = useState<string | null>(null)
+  const [pushSaving,     setPushSaving]     = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -49,6 +50,18 @@ export default function ProfilePage() {
     setAliasValue(profile?.alias ?? '')
     setAliasError(null)
     setEditingAlias(true)
+  }
+
+  async function handleTogglePush() {
+    if (!user || pushSaving) return
+    const next = !(profile?.push_enabled ?? true)
+    setPushSaving(true)
+    try {
+      await updatePushEnabled(user.id, next)
+      await refreshProfile()
+    } finally {
+      setPushSaving(false)
+    }
   }
 
   async function handleSaveAlias() {
@@ -197,6 +210,33 @@ export default function ProfilePage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Notificaciones push */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
+              <Bell size={15} className="text-brand" />
+            </div>
+            <div>
+              <h3 className="text-text font-semibold text-sm">Notificaciones push</h3>
+              <p className="text-muted text-xs mt-0.5">Recibí alertas aunque la app esté cerrada</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleTogglePush}
+            disabled={pushSaving}
+            className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
+              (profile?.push_enabled ?? true) ? 'bg-brand' : 'bg-elevated'
+            } disabled:opacity-50`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+              (profile?.push_enabled ?? true) ? 'translate-x-5' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

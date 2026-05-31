@@ -61,6 +61,15 @@ export async function acceptRequest(request: JoinRequest): Promise<void> {
   })
 
   if (error) throw new Error(error.message)
+
+  supabase.functions.invoke('send-push', {
+    body: {
+      user_id: request.user_id,
+      title:   '¡Solicitud aprobada!',
+      body:    `Ya podés acceder al torneo "${request.tournament?.name ?? 'el torneo'}"`,
+      url:     '/torneos',
+    },
+  }).catch(() => {})
 }
 
 export async function rejectRequest(request: JoinRequest): Promise<void> {
@@ -73,4 +82,13 @@ export async function rejectRequest(request: JoinRequest): Promise<void> {
   })
 
   if (error) throw new Error(error.message)
+
+  supabase.functions.invoke('send-push', {
+    body: {
+      user_id: request.user_id,
+      title:   'Solicitud no aprobada',
+      body:    `Tu solicitud al torneo "${request.tournament?.name ?? 'el torneo'}" no fue aprobada`,
+      url:     '/torneos',
+    },
+  }).catch(() => {})
 }
