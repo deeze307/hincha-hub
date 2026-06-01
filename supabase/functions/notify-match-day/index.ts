@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import webpush from 'npm:web-push'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +17,7 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    const webpush = (await import('https://esm.sh/web-push@3.6.7')).default
     webpush.setVapidDetails(
       `mailto:${Deno.env.get('VAPID_EMAIL')}`,
       Deno.env.get('VAPID_PUBLIC_KEY')!,
@@ -32,7 +32,7 @@ Deno.serve(async (req: Request) => {
     // 1. Partidos de hoy que aún no empezaron
     const { data: matches, error: mErr } = await supabase
       .from('competition_matches')
-      .select('id, competition_id, home_team_name, away_team_name, match_date')
+      .select('id, competition_id, match_date')
       .gte('match_date', `${today}T00:00:00`)
       .lt('match_date', `${today}T23:59:59`)
       .in('status', ['NS', 'TBD', 'SUSP'])
@@ -75,11 +75,24 @@ Deno.serve(async (req: Request) => {
     const userIds = [...new Set(registrations.map((r: any) => r.user_id))]
 
     // 4. Suscripciones push de usuarios con push_enabled = true
+    const { data: enabledProfiles } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('push_enabled', true)
+      .in('id', userIds)
+
+    const enabledIds = (enabledProfiles ?? []).map((p: any) => p.id)
+
+    if (!enabledIds.length) {
+      return new Response(JSON.stringify({ ok: true, msg: 'Sin usuarios con push habilitado' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     const { data: subs } = await supabase
       .from('push_subscriptions')
-      .select('user_id, endpoint, p256dh, auth, profiles!inner(push_enabled)')
-      .in('user_id', userIds)
-      .eq('profiles.push_enabled', true)
+      .select('user_id, endpoint, p256dh, auth')
+      .in('user_id', enabledIds)
 
     if (!subs?.length) {
       return new Response(JSON.stringify({ ok: true, msg: 'Sin suscripciones activas' }), {
@@ -137,7 +150,11 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
+    const message = err instanceof Error
+      ? err.message
+      : typeof err === 'object' ? JSON.stringify(err) : String(err)
+    console.error('notify-match-day error:', err)
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

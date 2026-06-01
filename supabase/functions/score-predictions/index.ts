@@ -218,7 +218,7 @@ Deno.serve(async () => {
       const notifyMatchIds = [...new Set(toNotify.map((r: any) => r.match_id))]
       const { data: matchDetails } = await supabase
         .from('competition_matches')
-        .select('id, home_team_name, away_team_name')
+        .select('id, home_team:home_team_id(name), away_team:away_team_id(name)')
         .in('id', notifyMatchIds)
 
       const matchDetailMap = new Map((matchDetails ?? []).map((m: any) => [m.id, m]))
@@ -229,8 +229,10 @@ Deno.serve(async () => {
         const entry = byUser.get(r.user_id) ?? { pts: 0, matches: [] }
         entry.pts += r.points_earned
         const md = matchDetailMap.get(r.match_id)
-        if (md?.home_team_name && md?.away_team_name) {
-          entry.matches.push(`${md.home_team_name} vs ${md.away_team_name}`)
+        const homeName = md?.home_team?.name
+        const awayName = md?.away_team?.name
+        if (homeName && awayName) {
+          entry.matches.push(`${homeName} vs ${awayName}`)
         }
         byUser.set(r.user_id, entry)
       }

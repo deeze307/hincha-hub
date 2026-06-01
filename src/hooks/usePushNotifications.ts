@@ -62,10 +62,15 @@ export function usePushNotifications() {
       const json  = sub.toJSON()
       const keys  = json.keys as { p256dh: string; auth: string }
 
-      await supabase.from('push_subscriptions').upsert(
+      const { error: upsertErr } = await supabase.from('push_subscriptions').upsert(
         { user_id: user.id, endpoint: json.endpoint!, p256dh: keys.p256dh, auth: keys.auth },
         { onConflict: 'user_id,endpoint' }
       )
+
+      if (upsertErr) {
+        console.error('Push subscription upsert error:', upsertErr)
+        throw upsertErr
+      }
 
       setSubscribed(true)
     } catch (err) {
