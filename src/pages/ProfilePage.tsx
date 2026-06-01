@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth, getDisplayName } from '../contexts/AuthContext'
 import { fetchMyTournamentPositions } from '../services/rankingService'
 import { uploadAvatar, fetchUserStreaks, updateAlias, updatePushEnabled } from '../services/profileService'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 import type { MyTournamentPosition } from '../services/rankingService'
 
 function medalFor(rank: number): string {
@@ -35,6 +36,7 @@ export default function ProfilePage() {
   const [aliasSaving,    setAliasSaving]    = useState(false)
   const [aliasError,     setAliasError]     = useState<string | null>(null)
   const [pushSaving,     setPushSaving]     = useState(false)
+  const push = usePushNotifications()
 
   useEffect(() => {
     Promise.all([
@@ -57,6 +59,11 @@ export default function ProfilePage() {
     const next = !(profile?.push_enabled ?? true)
     setPushSaving(true)
     try {
+      if (next) {
+        await push.subscribe()
+      } else {
+        await push.unsubscribe()
+      }
       await updatePushEnabled(user.id, next)
       await refreshProfile()
     } finally {
