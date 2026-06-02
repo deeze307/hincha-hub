@@ -750,7 +750,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
               {RANK_META.map(({ rank, label, pts, medal }) => {
                 const key = `${bonusType}-${rank}`
                 return (
-                  <div key={rank} className="flex items-center gap-2">
+                  <div key={rank} className="flex items-center gap-2 min-w-0">
                     <div className="w-20 shrink-0 flex items-center gap-1.5">
                       <span className="text-lg leading-none">{medal}</span>
                       <div>
@@ -758,7 +758,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
                         <p className="text-brand text-[11px] font-bold">+{pts} pts</p>
                       </div>
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       {meta.kind === 'team' ? (
                         <AutocompleteTeam
                           value={teamPicks[key] ?? null}
@@ -1006,6 +1006,7 @@ export default function TournamentProdePage() {
       setTimeout(() => setSaved(false), 3000)
       showToast('¡Predicciones guardadas!', 'success')
     } catch (err) {
+      console.error('Error guardando bonus:', err)
       showToast('Error al guardar. Intentá de nuevo.', 'error')
     } finally {
       setSaving(false)
@@ -1058,14 +1059,16 @@ export default function TournamentProdePage() {
           <div className="flex flex-col items-end gap-1.5 mt-1 shrink-0">
             {/* Fila 1: refresh + invitar */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={refreshMatches}
-                disabled={refreshing}
-                title="Actualizar partidos"
-                className="shrink-0 flex items-center justify-center w-8 h-8 text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg transition-colors disabled:opacity-40"
-              >
-                <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={refreshMatches}
+                  disabled={refreshing}
+                  title="Actualizar partidos"
+                  className="shrink-0 flex items-center justify-center w-8 h-8 text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+                </button>
+              )}
               {canInvite && (
                 <button
                   onClick={handleInvite}

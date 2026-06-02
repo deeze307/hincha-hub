@@ -26,7 +26,7 @@ export async function searchTeams(
   let q = supabase
     .from('teams')
     .select('id, name, logo_url, country, type')
-    .ilike('name', `%${query}%`)
+    .or(query.trim().split(/\s+/).map(w => `name.ilike.%${w}%`).join(','))
     .limit(limit)
 
   if (type) q = q.eq('type', type)
@@ -48,7 +48,7 @@ export async function searchPlayers(
       team:team_id ( id, name, logo_url )
     `)
     .eq('competition_id', competitionId)
-    .ilike('name', `%${query}%`)
+    .or(query.trim().split(/\s+/).map(w => `name.ilike.%${w}%`).join(','))
     .limit(limit)
 
   if (error) throw error
