@@ -36,6 +36,10 @@ export async function searchTeams(
   return data ?? []
 }
 
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
 export async function searchPlayers(
   query:         string,
   competitionId: string,   // filtra por competencia para evitar mezclar squads
@@ -48,9 +52,12 @@ export async function searchPlayers(
       team:team_id ( id, name, logo_url )
     `)
     .eq('competition_id', competitionId)
-    .or(query.trim().split(/\s+/).map(w => `name.ilike.%${w}%`).join(','))
-    .limit(limit)
 
   if (error) throw error
-  return (data ?? []) as unknown as PlayerOption[]
+
+  const words = query.trim().split(/\s+/).filter(Boolean).map(stripAccents)
+
+  return (data ?? [] as unknown[])
+    .filter((p: any) => words.every(w => stripAccents(p.name).includes(w)))
+    .slice(0, limit) as unknown as PlayerOption[]
 }
