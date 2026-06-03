@@ -139,25 +139,47 @@ Deno.serve(async (_req) => {
         const round    = f.league?.round ?? 'Unknown'
         const isGroup  = round.toLowerCase().includes('group')
 
+        // Detecta si un group_name es un "pseudo-grupo" de la API (no un grupo real)
+        const isPseudoGroup = (g: string) =>
+          g.toLowerCase().includes('ranking') || g.toLowerCase().includes('third')
+
         // group_name: primero intentar el formato "Group A" directo en el round,
         // sino usar el mapa de standings por equipo local
         let groupName: string | null = null
         if (isGroup) {
-          // Solo matchea "Group A", "Group B"... NO "Group Stage"
-          // \b asegura que la letra esté sola (no seguida de más letras)
           const directMatch = round.match(/\bGroup\s+([A-Z])\b/)
           if (directMatch) {
             groupName = `Group ${directMatch[1].toUpperCase()}`
           } else {
-            // Fallback: buscar por el equipo local en el mapa de standings
-            groupName = groupMap.get(f.teams?.home?.id) ?? null
+            const mapped = groupMap.get(f.teams?.home?.id) ?? null
+            if (mapped && !isPseudoGroup(mapped)) groupName = mapped
           }
         }
 
-        const roundKey   = Object.keys(ROUND_ORDER).find(k =>
-          round.toLowerCase().includes(k.toLowerCase())
-        ) ?? round
-        const roundOrder = ROUND_ORDER[roundKey] ?? 1
+        // Fallback: si ambos equipos comparten el mismo grupo real en standings,
+        // asignarlo aunque el round diga otra cosa (ej: "Ranking of third-placed teams")
+        if (groupName === null) {
+          const homeGroup = groupMap.get(f.teams?.home?.id)
+          const awayGroup = groupMap.get(f.teams?.away?.id)
+          if (homeGroup && homeGroup === awayGroup && !isPseudoGroup(homeGroup)) {
+            groupName = homeGroup
+          }
+        }
+
+        // Si el round es un "ranking de terceros" y no encontramos grupo real,
+        // marcar como grupo provisional para no perder el partido de la vista
+        const isRankingRound = isPseudoGroup(round)
+        if (groupName === null && isRankingRound) {
+          groupName = 'Ranking of third-placed teams'
+        }
+
+        // Si detectamos grupo por fallback, tratar el partido como fase de grupos
+        const effectiveRound = groupName !== null
+          ? 'Group Stage'
+          : (Object.keys(ROUND_ORDER).find(k =>
+              round.toLowerCase().includes(k.toLowerCase())
+            ) ?? round)
+        const roundOrder = ROUND_ORDER[effectiveRound] ?? 1
 
         const homeWon     = f.teams?.home?.winner === true
         const awayWon     = f.teams?.away?.winner === true
@@ -167,7 +189,7 @@ Deno.serve(async (_req) => {
           external_id:    f.fixture.id,
           competition_id: comp.competitionId,
           season_year:    comp.seasonYear,
-          round:          roundKey,
+          round:          effectiveRound,
           round_order:    roundOrder,
           group_name:     groupName,
           match_date:     f.fixture.date,
@@ -190,6 +212,35 @@ Deno.serve(async (_req) => {
 
       if (error) throw error
       totalUpserted += rows.length
+
+      // ── Post-proceso: asignar grupo correcto a partidos sin group_name
+      // Aplica a cualquier partido de Group Stage con group_name NULL o pseudo-grupo
+      const { data: ungroupedMatches } = await supabase
+        .from('competition_matches')
+        .select('id, home_team_id, away_team_id')
+        .eq('competition_id', comp.competitionId)
+        .eq('round', 'Group Stage')
+        .or('group_name.is.null,group_name.eq.Ranking of third-placed teams')
+
+      for (const m of ungroupedMatches ?? []) {
+        const { data: ref } = await supabase
+          .from('competition_matches')
+          .select('group_name')
+          .eq('competition_id', comp.competitionId)
+          .or(`home_team_id.eq.${m.home_team_id},away_team_id.eq.${m.home_team_id}`)
+          .not('group_name', 'is', null)
+          .neq('group_name', 'Ranking of third-placed teams')
+          .neq('id', m.id)
+          .limit(1)
+          .maybeSingle()
+
+        if (ref?.group_name) {
+          await supabase
+            .from('competition_matches')
+            .update({ group_name: ref.group_name })
+            .eq('id', m.id)
+        }
+      }
 
       // ── Auto-sync de award_results para bonus automáticos ──────────────
       // Solo para torneos de esta competencia que tengan esos bonus activos.

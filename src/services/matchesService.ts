@@ -56,8 +56,8 @@ export function groupMatchesByGroup(
   matches: CompetitionMatch[],
 ): Map<string, CompetitionMatch[]> {
   const groups = new Map<string, CompetitionMatch[]>()
-  for (const m of matches.filter(m => m.round_order === 1)) {
-    const key = m.group_name ?? 'Grupo'
+  for (const m of matches.filter(m => m.group_name != null)) {
+    const key = m.group_name!
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(m)
   }
@@ -68,7 +68,7 @@ export function groupMatchesByRound(
   matches: CompetitionMatch[],
 ): Map<string, CompetitionMatch[]> {
   const rounds = new Map<string, CompetitionMatch[]>()
-  for (const m of matches.filter(m => m.round_order > 1)) {
+  for (const m of matches.filter(m => m.group_name == null && m.round_order > 1)) {
     if (!rounds.has(m.round)) rounds.set(m.round, [])
     rounds.get(m.round)!.push(m)
   }

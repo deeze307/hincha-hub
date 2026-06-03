@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw, Info } from 'lucide-react'
 import { fetchTournaments } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
 import type { BonusType } from '../services/tournamentsService'
@@ -806,6 +806,8 @@ export default function TournamentProdePage() {
   const [saved,       setSaved]       = useState(false)
   const [tab,         setTab]         = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
   const [toast,       setToast]       = useState<ToastInfo | null>(null)
+  const [rulesOpen,    setRulesOpen]    = useState(false)
+  const [rulesVisible, setRulesVisible] = useState(false)
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type })
@@ -1095,6 +1097,16 @@ export default function TournamentProdePage() {
           </div>
         </div>
 
+        {/* Bases y condiciones */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => { setRulesOpen(true); setTimeout(() => setRulesVisible(true), 10) }}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <Info size={13} /> Bases y condiciones
+          </button>
+        </div>
+
         {/* Fila 2: estado / acciones */}
         {tab !== 'ranking' && (
           <div className="flex items-center justify-between gap-3 pl-11">
@@ -1125,8 +1137,80 @@ export default function TournamentProdePage() {
         )}
       </div>
 
-      {/* Info de puntuación */}
-      <ScoringInfoBanner />
+      {/* Modal bases y condiciones */}
+      {rulesOpen && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 ${rulesVisible ? 'bg-black/60 backdrop-blur-sm' : 'bg-transparent'}`}
+          onClick={() => { setRulesVisible(false); setTimeout(() => setRulesOpen(false), 300) }}
+        >
+          <div
+            className={`bg-surface border border-border rounded-2xl w-full max-w-sm shadow-elevated transition-all duration-300 ease-out ${rulesVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border">
+              <h2 className="text-text font-semibold text-[15px]">Bases y condiciones</h2>
+              <button
+                onClick={() => { setRulesVisible(false); setTimeout(() => setRulesOpen(false), 300) }}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-text hover:bg-elevated transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-5 overflow-y-auto max-h-[70vh]">
+
+              {/* Sistema de puntuación */}
+              <div className="space-y-2.5">
+                <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Sistema de puntuación</p>
+                <p className="text-muted text-xs leading-relaxed">
+                  Dependiendo del momento en el que se realice la predicción es el puntaje máximo que recibirá en cada caso.
+                  Si se realiza la predicción de un partido con más de <span className="text-green-400 font-semibold">24hs</span> de antelación, obtendrá el puntaje marcado en <span className="text-green-400 font-semibold">verde</span>, pero si modifica algún resultado o realiza la predicción con menos de <span className="text-yellow-400 font-semibold">24hs</span> de antelación, obtendrá como máximo el puntaje marcado en <span className="text-yellow-400 font-semibold">amarillo</span>.
+                </p>
+                <div className="space-y-1">
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center mb-1.5">
+                    <span />
+                    <span className="text-green-400 text-[10px] font-semibold text-right">≥ 24h antes</span>
+                    <span className="text-yellow-400 text-[10px] font-semibold text-right">&lt; 24h antes</span>
+                  </div>
+                  {([
+                    ['Resultado exacto',            12, 6],
+                    ['Ganador + goles de 1 equipo',  8, 4],
+                    ['Solo ganador / empate',         6, 3],
+                    ['Goles de un equipo',            2, 1],
+                  ] as [string, number, number][]).map(([label, early, late]) => (
+                    <div key={label} className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center">
+                      <span className="text-muted text-xs">{label}</span>
+                      <span className="text-green-400 text-xs font-bold text-right">+{early}</span>
+                      <span className="text-yellow-400 text-xs font-bold text-right">+{late}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Distribución de premios — solo si hay fee */}
+              {tournament.entry_fee && tournament.entry_fee > 0 && (
+                <div className="space-y-2.5">
+                  <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Distribución de premios</p>
+                  <div className="space-y-1.5">
+                    {([
+                      ['🏆', 'Del total recaudado va a premios', '90%'],
+                      ['🥇', '1° puesto',                        '60% del pozo'],
+                      ['🥈', '2° puesto',                        '30% del pozo'],
+                      ['🥉', '3° puesto',                        '10% del pozo'],
+                    ] as [string, string, string][]).map(([icon, label, value]) => (
+                      <div key={label} className="flex items-center gap-2.5">
+                        <span className="text-base leading-none w-5 text-center shrink-0">{icon}</span>
+                        <span className="text-muted text-xs flex-1">{label}</span>
+                        <span className="text-text text-xs font-semibold">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-elevated p-1 rounded-md w-full sm:w-fit">
@@ -1550,37 +1634,6 @@ function ProdeRankingTab({
         />
       )}
     </>
-  )
-}
-
-// ─── Banner de sistema de puntos ─────────────────────────────────
-
-function ScoringInfoBanner() {
-  const rows: [string, number, number][] = [
-    ['Resultado exacto',          12, 6],
-    ['Ganador + goles de 1 equipo', 8, 4],
-    ['Solo ganador / empate',       6, 3],
-    ['Goles de un equipo',          2, 1],
-  ]
-  return (
-    <div className="bg-elevated border border-border rounded-xl px-4 py-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Puntos por predicción</p>
-        <div className="flex items-center gap-3 text-[10px]">
-          <span className="text-green-400 font-semibold">● ≥ 24h antes</span>
-          <span className="text-yellow-400 font-semibold">● &lt; 24h antes</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1">
-        {rows.map(([label, early, late]) => (
-          <div key={label} className="contents">
-            <span className="text-muted text-xs">{label}</span>
-            <span className="text-green-400 text-xs font-bold text-right">+{early}</span>
-            <span className="text-yellow-400 text-xs font-bold text-right">+{late}</span>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }
 
