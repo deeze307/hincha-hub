@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { acceptTerms } from '../../services/profileService'
 
 export default function TermsModal() {
   const { user, refreshProfile } = useAuth()
@@ -10,10 +10,7 @@ export default function TermsModal() {
   async function handleContinue() {
     if (!accepted || !user) return
     setSaving(true)
-    await supabase
-      .from('profiles')
-      .update({ terms_accepted_at: new Date().toISOString() })
-      .eq('id', user.id)
+    await acceptTerms(user.id)
     await refreshProfile()
     setSaving(false)
   }

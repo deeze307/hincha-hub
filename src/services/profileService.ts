@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 
+export async function acceptTerms(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ terms_accepted_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw new Error(error.message)
+}
+
 export async function updatePushEnabled(userId: string, enabled: boolean): Promise<void> {
   const { error } = await supabase
     .from('profiles')
