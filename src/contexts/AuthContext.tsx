@@ -11,7 +11,8 @@ export interface Profile {
   alias:        string | null
   avatar_url:   string | null
   role:         UserRole
-  push_enabled: boolean
+  push_enabled:      boolean
+  terms_accepted_at: string | null
 }
 
 /** Alias → full_name → username → email prefix → 'Usuario' */
@@ -47,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function fetchProfile(userId: string): Promise<Profile | null> {
     const { data } = await supabase
       .from('profiles')
-      .select('id, username, full_name, alias, avatar_url, role, push_enabled')
+      .select('id, username, full_name, alias, avatar_url, role, push_enabled, terms_accepted_at')
       .eq('id', userId)
       .single()
     return data as Profile | null

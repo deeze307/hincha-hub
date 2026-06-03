@@ -4,9 +4,10 @@ import Header from './Header'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
 import InstallBanner from '../organisms/InstallBanner'
+import TermsModal from '../organisms/TermsModal'
 
 export default function AppLayout() {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
 
   if (loading) {
     return (
@@ -31,6 +32,7 @@ export default function AppLayout() {
 
       <InstallBanner />
       <BottomNav />
+      {profile && !profile.terms_accepted_at && <TermsModal />}
     </div>
   )
 }
