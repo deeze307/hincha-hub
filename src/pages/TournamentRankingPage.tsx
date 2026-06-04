@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchTournamentRanking } from '../services/rankingService'
 import type { RankingEntry } from '../services/rankingService'
+import { removeParticipant } from '../services/tournamentsService'
 import { supabase } from '../lib/supabase'
-import { ChevronLeft } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { useModal } from '../contexts/ModalContext'
+import { useToast } from '../contexts/ToastContext'
+import { ChevronLeft, UserMinus } from 'lucide-react'
 
 function medalFor(rank: number): string {
   if (rank === 1) return '🥇'
@@ -25,31 +29,60 @@ function Avatar({ url, name }: { url: string | null; name: string }) {
 }
 
 export default function TournamentRankingPage() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const { id }     = useParams<{ id: string }>()
+  const navigate   = useNavigate()
+  const { profile }   = useAuth()
+  const { confirm }   = useModal()
+  const { showToast } = useToast()
 
-  const [entries, setEntries]           = useState<RankingEntry[]>([])
-  const [loading, setLoading]           = useState(true)
+  const [entries,        setEntries]        = useState<RankingEntry[]>([])
+  const [loading,        setLoading]        = useState(true)
   const [tournamentName, setTournamentName] = useState('')
-  const [myUserId, setMyUserId]         = useState<string | null>(null)
+  const [createdBy,      setCreatedBy]      = useState<string | null>(null)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setMyUserId(data.user?.id ?? null))
-  }, [])
+  const myUserId = profile?.id ?? null
+  const isAdmin  = myUserId !== null && (
+    myUserId === createdBy || profile?.role === 'superadmin'
+  )
+
+  const gridCols = isAdmin
+    ? 'grid-cols-[2rem_1fr_4rem_4rem_4rem_2rem]'
+    : 'grid-cols-[2rem_1fr_4rem_4rem_4rem]'
 
   useEffect(() => {
     if (!id) return
     supabase
       .from('tournaments')
-      .select('name')
+      .select('name, created_by')
       .eq('id', id)
       .single()
-      .then(({ data }: { data: any }) => setTournamentName(data?.name ?? 'Torneo'))
+      .then(({ data }: { data: any }) => {
+        setTournamentName(data?.name ?? 'Torneo')
+        setCreatedBy(data?.created_by ?? null)
+      })
 
     fetchTournamentRanking(id)
       .then(setEntries)
       .finally(() => setLoading(false))
   }, [id])
+
+  function handleRemove(entry: RankingEntry) {
+    confirm({
+      title:          'Quitar participante',
+      message:        `¿Querés quitar a ${entry.displayName} del torneo? Esta acción no se puede deshacer.`,
+      confirmLabel:   'Quitar',
+      confirmVariant: 'danger',
+      onConfirm:      async () => {
+        try {
+          await removeParticipant(id!, entry.userId)
+          setEntries(prev => prev.filter(e => e.userId !== entry.userId))
+          showToast(`${entry.displayName} fue quitado del torneo.`, 'success')
+        } catch {
+          showToast('Error al quitar el participante. Intentá de nuevo.', 'error')
+        }
+      },
+    })
+  }
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
@@ -70,12 +103,13 @@ export default function TournamentRankingPage() {
       {/* Tabla */}
       <div className="card overflow-hidden">
         {/* Encabezado */}
-        <div className="grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-2.5 border-b border-border bg-elevated/60">
+        <div className={`grid ${gridCols} gap-2 px-4 py-2.5 border-b border-border bg-elevated/60`}>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">#</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">Jugador</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Partidos</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Bonus</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Total</span>
+          {isAdmin && <span />}
         </div>
 
         {loading && (
@@ -87,15 +121,17 @@ export default function TournamentRankingPage() {
         )}
 
         {!loading && entries.map((entry, idx) => {
-          const isMe    = entry.userId === myUserId
-          const medal   = entry.rank > 0 ? medalFor(entry.rank) : ''
+          const isMe      = entry.userId === myUserId
+          const isOwner   = entry.userId === createdBy
+          const medal     = entry.rank > 0 ? medalFor(entry.rank) : ''
           const rankLabel = entry.rank > 0 ? (medal || `#${entry.rank}`) : '—'
+          const canRemove = isAdmin && !isMe && !isOwner
 
           return (
             <div
               key={entry.userId}
               className={[
-                'grid grid-cols-[2rem_1fr_4rem_4rem_4rem] gap-2 px-4 py-3 items-center',
+                `grid ${gridCols} gap-2 px-4 py-3 items-center`,
                 idx < entries.length - 1 ? 'border-b border-border/50' : '',
                 isMe ? 'bg-brand/5' : '',
               ].join(' ')}
@@ -129,6 +165,21 @@ export default function TournamentRankingPage() {
               <span className={`text-sm font-bold text-right ${isMe ? 'text-brand' : 'text-text'}`}>
                 {entry.totalPts}
               </span>
+
+              {/* Quitar (solo admin, no al creador ni a sí mismo) */}
+              {isAdmin && (
+                canRemove ? (
+                  <button
+                    onClick={() => handleRemove(entry)}
+                    title={`Quitar a ${entry.displayName}`}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                  >
+                    <UserMinus size={14} />
+                  </button>
+                ) : (
+                  <span />
+                )
+              )}
             </div>
           )
         })}

@@ -2,8 +2,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw, Info } from 'lucide-react'
-import { fetchTournaments } from '../services/tournamentsService'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw, Info, UserMinus } from 'lucide-react'
+import { fetchTournaments, removeParticipant } from '../services/tournamentsService'
+import { useModal } from '../contexts/ModalContext'
 import { useAuth } from '../contexts/AuthContext'
 import type { BonusType } from '../services/tournamentsService'
 import { fetchMatchesByCompetition, groupMatchesByGroup, groupMatchesByRound } from '../services/matchesService'
@@ -13,8 +14,7 @@ import {
 } from '../services/predictionsService'
 import { searchTeams, searchPlayers } from '../services/teamsService'
 import { createInviteLink } from '../services/inviteService'
-import { Toast } from '../components/molecules/Toast'
-import type { ToastInfo } from '../components/molecules/Toast'
+import { useToast } from '../contexts/ToastContext'
 import { fetchTournamentRanking, fetchUserMatchBreakdown } from '../services/rankingService'
 import type { UserMatchBreakdown } from '../services/rankingService'
 import type { Tournament } from '../services/tournamentsService'
@@ -805,13 +805,9 @@ export default function TournamentProdePage() {
   const [saving,      setSaving]      = useState(false)
   const [saved,       setSaved]       = useState(false)
   const [tab,         setTab]         = useState<'groups' | 'knockout' | 'bonus' | 'ranking'>('groups')
-  const [toast,       setToast]       = useState<ToastInfo | null>(null)
   const [rulesOpen,    setRulesOpen]    = useState(false)
   const [rulesVisible, setRulesVisible] = useState(false)
-
-  function showToast(message: string, type: 'success' | 'error') {
-    setToast({ message, type })
-  }
+  const { showToast } = useToast()
   const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
   const [rankingLoading, setRankingLoading] = useState(false)
   const myUserId = profile?.id ?? null
@@ -1298,6 +1294,9 @@ export default function TournamentProdePage() {
           loading={rankingLoading}
           myUserId={myUserId}
           tournamentId={id!}
+          isAdmin={isOwner || isSuperAdmin}
+          createdBy={tournament?.created_by ?? null}
+          onRemoveEntry={userId => setRankingEntries(prev => prev.filter(e => e.userId !== userId))}
         />
       )}
 
@@ -1306,8 +1305,6 @@ export default function TournamentProdePage() {
         <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />
       )}
 
-      {/* ── Toast ── */}
-      {toast && <Toast info={toast} onDismiss={() => setToast(null)} />}
 
     </div>
   )
@@ -1532,14 +1529,41 @@ function medalFor(rank: number): string {
 }
 
 function ProdeRankingTab({
-  entries, loading, myUserId, tournamentId,
+  entries, loading, myUserId, tournamentId, isAdmin, createdBy, onRemoveEntry,
 }: {
-  entries:      RankingEntry[]
-  loading:      boolean
-  myUserId:     string | null
-  tournamentId: string
+  entries:        RankingEntry[]
+  loading:        boolean
+  myUserId:       string | null
+  tournamentId:   string
+  isAdmin:        boolean
+  createdBy:      string | null
+  onRemoveEntry:  (userId: string) => void
 }) {
   const [selectedUser, setSelectedUser] = useState<PlayerSheetInfo | null>(null)
+  const { confirm }   = useModal()
+  const { showToast } = useToast()
+
+  const gridBase = isAdmin
+    ? 'grid-cols-[2rem_1fr_3.5rem_2rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem_2rem]'
+    : 'grid-cols-[2rem_1fr_3.5rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem]'
+
+  function handleRemove(entry: RankingEntry) {
+    confirm({
+      title:          'Quitar participante',
+      message:        `¿Querés quitar a ${entry.displayName} del torneo? Esta acción no se puede deshacer.`,
+      confirmLabel:   'Quitar',
+      confirmVariant: 'danger',
+      onConfirm:      async () => {
+        try {
+          await removeParticipant(tournamentId, entry.userId)
+          onRemoveEntry(entry.userId)
+          showToast(`${entry.displayName} fue quitado del torneo.`, 'success')
+        } catch {
+          showToast('Error al quitar el participante. Intentá de nuevo.', 'error')
+        }
+      },
+    })
+  }
 
   if (loading) {
     return (
@@ -1557,16 +1581,19 @@ function ProdeRankingTab({
     <>
       <div className="card overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[2rem_1fr_3.5rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem] gap-2 px-4 py-2.5 border-b border-border bg-elevated/60">
+        <div className={`grid ${gridBase} gap-2 px-4 py-2.5 border-b border-border bg-elevated/60`}>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">#</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest">Jugador</span>
           <span className="hidden sm:block text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Partidos</span>
           <span className="hidden sm:block text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Bonus</span>
           <span className="text-muted text-[10px] font-semibold uppercase tracking-widest text-right">Total</span>
+          {isAdmin && <span />}
         </div>
 
         {entries.map((entry, idx) => {
           const isMe      = entry.userId === myUserId
+          const isOwner   = entry.userId === createdBy
+          const canRemove = isAdmin && !isMe && !isOwner
           const medal     = entry.rank > 0 ? medalFor(entry.rank) : ''
           const rankLabel = entry.rank > 0 ? (medal || `#${entry.rank}`) : '—'
 
@@ -1593,11 +1620,25 @@ function ProdeRankingTab({
               <span className={`text-sm font-bold text-right ${isMe ? 'text-brand' : 'text-text'}`}>
                 {entry.totalPts}
               </span>
+              {isAdmin && (
+                canRemove ? (
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); handleRemove(entry) }}
+                    title={`Quitar a ${entry.displayName}`}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                  >
+                    <UserMinus size={14} />
+                  </button>
+                ) : (
+                  <span />
+                )
+              )}
             </>
           )
 
           const rowClass = [
-            'w-full text-left grid grid-cols-[2rem_1fr_3.5rem] sm:grid-cols-[2rem_1fr_4.5rem_4rem_4rem] gap-2 px-4 py-3 items-center',
+            `w-full text-left grid ${gridBase} gap-2 px-4 py-3 items-center`,
             idx < entries.length - 1 ? 'border-b border-border/50' : '',
             isMe ? 'bg-brand/5' : '',
           ].join(' ')

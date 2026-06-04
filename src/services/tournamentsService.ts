@@ -268,6 +268,16 @@ export async function requestJoinTournament(tournamentId: string): Promise<void>
   if (error) throw new Error(error.message)
 }
 
+export async function removeParticipant(tournamentId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('tournament_registrations')
+    .delete()
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId)
+
+  if (error) throw new Error(error.message)
+}
+
 async function uploadTournamentImage(file: File, tournamentId: string): Promise<string> {
   const ext  = file.name.split('.').pop()
   const path = `${tournamentId}/cover.${ext}`
