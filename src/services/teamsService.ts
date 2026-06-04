@@ -42,7 +42,7 @@ function stripAccents(s: string): string {
 
 export async function searchPlayers(
   query:         string,
-  competitionId: string,   // filtra por competencia para evitar mezclar squads
+  competitionId: string,
   limit =        10,
 ): Promise<PlayerOption[]> {
   const { data, error } = await supabase

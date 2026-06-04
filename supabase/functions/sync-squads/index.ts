@@ -138,62 +138,90 @@ async function syncCompetition(
   teamType:      string,
   competitionId: string,
 ): Promise<{ teams: number; players: number }> {
-  // Sync teams
+  // Upsert teams from API-Football league endpoint (may be incomplete for some competitions)
   const teamsData = await apiFetch(`/teams?league=${leagueId}&season=${season}`)
   const teamsRaw  = teamsData?.response ?? []
-  if (!teamsRaw.length) return { teams: 0, players: 0 }
 
-  const teamRows = teamsRaw.map((t: any) => ({
-    external_id: t.team.id,
-    name:        esName(t.team.name) ?? t.team.name,
-    logo_url:    t.team.logo,
-    country:     esName(t.team.country) ?? t.team.country,
-    type:        teamType,
-  }))
+  if (teamsRaw.length) {
+    const teamRows = teamsRaw.map((t: any) => ({
+      external_id: t.team.id,
+      name:        esName(t.team.name) ?? t.team.name,
+      logo_url:    t.team.logo,
+      country:     esName(t.team.country) ?? t.team.country,
+      type:        teamType,
+    }))
+    const { error: teamsErr } = await supabase
+      .from('teams')
+      .upsert(teamRows, { onConflict: 'external_id' })
+    if (teamsErr) throw teamsErr
+  }
 
-  const { error: teamsErr } = await supabase
-    .from('teams')
-    .upsert(teamRows, { onConflict: 'external_id' })
-  if (teamsErr) throw teamsErr
+  // Use competition_matches as source of truth for participating teams —
+  // covers teams that enter directly in group stage and may not appear in
+  // the API /teams endpoint for this league/season
+  const { data: matchRows } = await supabase
+    .from('competition_matches')
+    .select('home_team_id, away_team_id')
+    .eq('competition_id', competitionId)
 
-  const externalIds = teamRows.map((t: any) => t.external_id)
+  const matchTeamUuids = [...new Set(
+    (matchRows ?? []).flatMap((m: any) =>
+      [m.home_team_id, m.away_team_id].filter(Boolean)
+    )
+  )]
+
+  if (!matchTeamUuids.length) return { teams: 0, players: 0 }
+
   const { data: dbTeams } = await supabase
     .from('teams')
     .select('id, external_id')
-    .in('external_id', externalIds)
+    .in('id', matchTeamUuids)
+
+  if (!dbTeams?.length) return { teams: 0, players: 0 }
 
   const teamMap = new Map((dbTeams ?? []).map((t: any) => [t.external_id, t.id]))
 
-  // Sync players (squad por equipo)
-  let totalPlayers = 0
-  for (const t of teamsRaw) {
-    const squadData = await apiFetch(`/players/squads?team=${t.team.id}`)
-    const squad     = squadData?.response?.[0]?.players ?? []
+  console.log(`Teams from competition_matches: ${dbTeams.length}`)
+  console.log('Team external_ids:', dbTeams.map((t: any) => t.external_id).join(', '))
 
-    const playerRows = squad.map((p: any) => ({
-      external_id:    p.id,
-      competition_id: competitionId,
-      name:           p.name,
-      photo_url:      p.photo,
-      nationality:    esName(p.nationality ?? null),
-      flag_url:       flagUrl(p.nationality ?? null),
-      team_id:        teamMap.get(t.team.id) ?? null,
-      position:       esPosition(p.position ?? null),
-      updated_at:     new Date().toISOString(),
-    }))
+  // Sync players for every team that appears in match data
+  let totalPlayers = 0
+  for (const team of dbTeams) {
+    const squadData = await apiFetch(`/players/squads?team=${team.external_id}`)
+    const squad     = squadData?.response?.[0]?.players ?? []
+    console.log(`Team ext_id=${team.external_id}: ${squad.length} players, errors=${squadData?.errors ? JSON.stringify(squadData.errors) : 'none'}`)
+
+    const seen = new Set<number>()
+    const playerRows = squad
+      .filter((p: any) => {
+        if (seen.has(p.id)) return false
+        seen.add(p.id)
+        return true
+      })
+      .map((p: any) => ({
+        external_id:    p.id,
+        competition_id: competitionId,
+        name:           p.name,
+        photo_url:      p.photo,
+        nationality:    esName(p.nationality ?? null),
+        flag_url:       flagUrl(p.nationality ?? null),
+        team_id:        teamMap.get(team.external_id) ?? null,
+        position:       esPosition(p.position ?? null),
+        updated_at:     new Date().toISOString(),
+      }))
 
     if (playerRows.length) {
       const { error } = await supabase
         .from('players')
         .upsert(playerRows, { onConflict: 'external_id,competition_id' })
-      if (error) console.error(`Players upsert error (team ${t.team.id}):`, error)
+      if (error) console.error(`Players upsert error (team ${team.external_id}):`, error)
       else totalPlayers += playerRows.length
     }
 
     await new Promise(r => setTimeout(r, 200))
   }
 
-  return { teams: teamRows.length, players: totalPlayers }
+  return { teams: dbTeams.length, players: totalPlayers }
 }
 
 Deno.serve(async (req) => {
