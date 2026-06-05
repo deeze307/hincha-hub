@@ -1266,7 +1266,7 @@ export default function TournamentProdePage() {
           {/* Partidos planos: sin grupo ni knockout (amistosos, etc.) */}
           {flatMatches.length > 0 && (
             <div className="col-span-2 card overflow-hidden">
-              {flatMatches.map((m, idx) => (
+              {flatMatches.map((m) => (
                 <MatchRow
                   key={m.id}
                   match={m}
