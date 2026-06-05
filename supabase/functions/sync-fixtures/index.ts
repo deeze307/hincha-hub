@@ -87,6 +87,24 @@ Deno.serve(async (_req) => {
       }))
       .filter(c => c.externalId && c.seasonYear)
 
+    // Agregar competiciones featured que no estén ya cubiertas por torneos
+    const { data: featuredComps } = await supabase
+      .from('competitions')
+      .select('id, external_id, season_year')
+      .eq('featured', true)
+      .not('is_test', 'is', true)
+
+    for (const fc of (featuredComps ?? [])) {
+      if (!fc.id || seen.has(fc.id)) continue
+      seen.add(fc.id)
+      competitions.push({
+        competitionId: fc.id,
+        externalId:    fc.external_id,
+        seasonYear:    fc.season_year,
+        teamType:      'national',
+      })
+    }
+
     let totalUpserted = 0
 
     for (const comp of competitions) {

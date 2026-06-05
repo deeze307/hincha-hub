@@ -9,6 +9,20 @@ export function isLive(status: string) {
   return LIVE_STATUSES.has(status)
 }
 
+const LIVE_PERIOD: Record<string, string> = {
+  '1H':  '1T',
+  'HT':  'ET',
+  '2H':  '2T',
+  'ET':  'TE',
+  'BT':  'TE',
+  'P':   'P',
+}
+
+export function livePeriodLabel(status: string): string {
+  const period = LIVE_PERIOD[status]
+  return period ? `EN VIVO (${period})` : 'EN VIVO'
+}
+
 export function useMatchesForDate(date: Date) {
   const [groups,  setGroups]  = useState<TournamentTodayMatches[]>([])
   const [loading, setLoading] = useState(true)

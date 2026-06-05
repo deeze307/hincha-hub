@@ -3,7 +3,7 @@ import { useNavigate }       from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Loader2, Trophy } from 'lucide-react'
 import { teamAbbr } from '../utils/teamUtils'
 import { useMatchDate, isSameDay, TODAY, MIN_DATE, MAX_DATE } from '../hooks/useMatchDate'
-import { useFeaturedMatchesForDate, isLive }                  from '../hooks/useMatchesForDate'
+import { useFeaturedMatchesForDate, isLive, livePeriodLabel } from '../hooks/useMatchesForDate'
 import { TeamDetailSheet }   from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail }     from '../hooks/useTeamDetail'
 import { fetchUserPredictionsForMatches } from '../services/predictionsService'
@@ -54,7 +54,7 @@ function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionNam
     <div className="grid grid-cols-[3.5rem_1fr_auto_1fr] items-center gap-2 px-4 py-3 border-b border-border/30 last:border-0">
       <div className="flex flex-col items-center shrink-0">
         {live
-          ? <span className="text-green-400 text-[10px] font-bold uppercase">EN VIVO</span>
+          ? <span className="text-green-400 text-[10px] font-bold uppercase leading-tight text-center">{livePeriodLabel(match.status)}</span>
           : <span className="text-muted-dark text-[12px] font-semibold">{time}</span>}
       </div>
 

@@ -908,6 +908,12 @@ export default function TournamentProdePage() {
 
   const groupMatchesMap   = useMemo(() => groupMatchesByGroup(matches),  [matches])
   const knockoutRoundsMap = useMemo(() => groupMatchesByRound(matches),  [matches])
+  // Partidos sin grupo ni knockout (ej: amistosos)
+  const flatMatches       = useMemo(
+    () => matches.filter(m => m.group_name == null && m.round_order <= 1),
+    [matches],
+  )
+  const hasGroups = groupMatchesMap.size > 0
 
   const bonusLocked = useMemo(() => {
     const refMatches = knockoutRoundsMap.get('3rd Place Final') ?? knockoutRoundsMap.get('Final') ?? []
@@ -1022,7 +1028,7 @@ export default function TournamentProdePage() {
   if (!tournament) return null
 
   const tabs = [
-    { key: 'groups',   label: 'Grupos' },
+    { key: 'groups',   label: hasGroups ? 'Grupos' : 'Partidos' },
     ...(config?.has_knockout ? [{ key: 'knockout', label: 'Eliminatoria' }] : []),
     ...(config?.has_bonus    ? [{ key: 'bonus',    label: 'Bonus' }]       : []),
     { key: 'ranking',  label: 'Ranking' },
@@ -1257,9 +1263,26 @@ export default function TournamentProdePage() {
             )
           })}
 
-          {groupMatchesMap.size === 0 && (
+          {/* Partidos planos: sin grupo ni knockout (amistosos, etc.) */}
+          {flatMatches.length > 0 && (
+            <div className="col-span-2 card overflow-hidden">
+              {flatMatches.map((m, idx) => (
+                <MatchRow
+                  key={m.id}
+                  match={m}
+                  pred={predMap.get(m.id) ?? { home: '', away: '', home_orig: '', away_orig: '', pts: null, is_modified: false, exists_in_db: false, predicted_at: null }}
+                  onChange={(h, a) => setPred(m.id, h, a)}
+                  onTeamClick={handleTeamClick}
+                  competitionCountry={tournament?.competition?.country ?? ''}
+                  competitionName={tournament?.competition?.name ?? ''}
+                />
+              ))}
+            </div>
+          )}
+
+          {groupMatchesMap.size === 0 && flatMatches.length === 0 && (
             <div className="col-span-2 card p-12 text-center text-muted">
-              No hay partidos de fase de grupos cargados aún.
+              No hay partidos cargados aún.
               <p className="text-xs text-muted-dark mt-2">
                 Ejecutá la función <code>sync-fixtures</code> desde Supabase para cargarlos.
               </p>
