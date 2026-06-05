@@ -1,11 +1,12 @@
 import { supabase } from '../lib/supabase'
 
 export interface Team {
-  id:       string
-  name:     string
-  logo_url: string | null
-  country:  string | null
-  type:     'national' | 'club'
+  id:          string
+  name:        string
+  logo_url:    string | null
+  country:     string | null
+  type:        'national' | 'club'
+  external_id: number
 }
 
 export interface CompetitionMatch {
@@ -32,22 +33,26 @@ export interface CompetitionMatch {
 export async function fetchMatchesByCompetition(
   competitionId: string,
   seasonYear:    number,
+  fromDate?:     string,   // ISO date string, e.g. '2026-04-01'
 ): Promise<CompetitionMatch[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('competition_matches')
     .select(`
       id, external_id, competition_id, season_year,
       round, round_order, group_name, match_date,
       home_score, away_score, home_penalties, away_penalties,
       winner_team_id, status, matchday, bracket_slot,
-      home_team:home_team_id ( id, name, logo_url, country, type ),
-      away_team:away_team_id ( id, name, logo_url, country, type )
+      home_team:home_team_id ( id, name, logo_url, country, type, external_id ),
+      away_team:away_team_id ( id, name, logo_url, country, type, external_id )
     `)
     .eq('competition_id', competitionId)
     .eq('season_year', seasonYear)
     .order('round_order', { ascending: true })
     .order('match_date',  { ascending: true })
 
+  if (fromDate) q = q.gte('match_date', fromDate)
+
+  const { data, error } = await q
   if (error) throw error
   return (data ?? []) as unknown as CompetitionMatch[]
 }

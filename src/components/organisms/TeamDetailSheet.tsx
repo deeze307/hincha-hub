@@ -235,6 +235,9 @@ export function TeamDetailSheet({ team, competitionId, seasonYear, competitionNa
                 const opp      = isHome ? m.away_team : m.home_team
                 const myScore  = isHome ? m.home_score! : m.away_score!
                 const oppScore = isHome ? m.away_score! : m.home_score!
+                const dateStr  = m.match_date
+                  ? new Date(m.match_date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+                  : null
                 return (
                   <div key={m.id} className="flex items-center gap-2.5">
                     <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${
@@ -246,6 +249,7 @@ export function TeamDetailSheet({ team, competitionId, seasonYear, competitionNa
                       <TeamLogo url={opp?.logo_url ?? null} name={opp?.name ?? '?'} size={16} />
                       <span className="text-text text-xs truncate">{opp?.name ?? '—'}</span>
                     </div>
+                    {dateStr && <span className="text-muted-dark text-[10px] shrink-0">{dateStr}</span>}
                     <span className="text-muted text-xs font-mono shrink-0">{myScore}–{oppScore}</span>
                   </div>
                 )

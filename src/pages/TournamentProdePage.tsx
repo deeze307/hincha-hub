@@ -43,6 +43,74 @@ type PredMap = Map<string, ScoreInput>  // match_id → scores
 
 const LOCKOUT_HOURS = 1   // bloqueo 1h antes del partido
 const LATE_HOURS    = 24  // predicciones dentro de 24h → puntos reducidos
+const FLAT_CUTOFF   = new Date(2026, 3, 1)  // April 1 en hora local (no UTC)
+const YOUTH_REGEXP  = /\bU\d{2}\b/i
+
+// FIFA Top 100 selecciones nacionales — external_ids de API-Football.
+// Set vacío = sin filtro (muestra todos). Llenarlo con el resultado de:
+//
+//   SELECT DISTINCT t.name, t.external_id
+//   FROM teams t
+//   JOIN competition_matches cm ON cm.home_team_id = t.id OR cm.away_team_id = t.id
+//   JOIN competitions c ON c.id = cm.competition_id
+//   WHERE c.external_id = 1 AND c.season_year = 2026
+//   ORDER BY t.name;
+//
+// Eso da los 48 equipos del Mundial 2026 (todos top ~65 FIFA).
+// Actualizar cuando el ranking cambie significativamente.
+// Equipos del Mundial 2026 — todos top ~65 FIFA.
+// Fuente: SELECT DISTINCT t.name, t.external_id FROM teams t JOIN competition_matches...
+// Actualizar si cambia el ranking significativamente.
+const FIFA_TOP100_IDS = new Set<number>([
+  25,   // Alemania
+  23,   // Arabia Saudita
+  1532, // Argelia
+  26,   // Argentina
+  20,   // Australia
+  775,  // Austria
+  1,    // Bélgica
+  1113, // Bosnia y Herzegovina
+  6,    // Brasil
+  1533, // Cabo Verde
+  5529, // Canadá
+  1569, // Catar
+  8,    // Colombia
+  17,   // Corea del Sur
+  1501, // Costa de Marfil
+  3,    // Croacia
+  5530, // Curaçao
+  2382, // Ecuador
+  32,   // Egipto
+  1108, // Escocia
+  9,    // España
+  2384, // Estados Unidos
+  2,    // Francia
+  1504, // Ghana
+  2386, // Haití
+  10,   // Inglaterra
+  22,   // Irán
+  1567, // Iraq
+  12,   // Japón
+  1548, // Jordania
+  31,   // Marruecos
+  16,   // México
+  1090, // Noruega
+  4673, // Nueva Zelanda
+  1118, // Países Bajos
+  11,   // Panamá
+  2380, // Paraguay
+  27,   // Portugal
+  1508, // R.D. del Congo
+  770,  // República Checa
+  13,   // Senegal
+  1531, // Sudáfrica
+  5,    // Suecia
+  15,   // Suiza
+  28,   // Túnez
+  777,  // Türkiye
+  7,    // Uruguay
+  1568, // Uzbekistán
+])
 
 function isMatchLocked(match: CompetitionMatch): boolean {
   if (match.home_score != null || match.away_score != null) return true
@@ -836,8 +904,10 @@ export default function TournamentProdePage() {
         const seasonYear = (t as any).competition?.season_year
           ?? new Date().getFullYear()
 
+        const config     = t.prode_config as any
+        const isFlat     = !config?.has_knockout && !config?.has_bonus
         const [ms, preds] = await Promise.all([
-          fetchMatchesByCompetition(compId, seasonYear),
+          fetchMatchesByCompetition(compId, seasonYear, isFlat ? FLAT_CUTOFF.toISOString() : undefined),
           fetchUserPredictions(id!),
         ])
 
@@ -908,9 +978,20 @@ export default function TournamentProdePage() {
 
   const groupMatchesMap   = useMemo(() => groupMatchesByGroup(matches),  [matches])
   const knockoutRoundsMap = useMemo(() => groupMatchesByRound(matches),  [matches])
-  // Partidos sin grupo ni knockout (ej: amistosos)
-  const flatMatches       = useMemo(
-    () => matches.filter(m => m.group_name == null && m.round_order <= 1),
+  // Partidos sin grupo ni knockout (ej: amistosos) — solo desde abril, solo mayores,
+  // y si FIFA_TOP100_IDS tiene datos, solo cuando al menos un equipo está en la lista.
+  const flatMatches = useMemo(
+    () => matches.filter(m => {
+      if (m.group_name != null || m.round_order > 1) return false
+      if (m.match_date && new Date(m.match_date) < FLAT_CUTOFF) return false
+      if (YOUTH_REGEXP.test(m.home_team?.name ?? '') || YOUTH_REGEXP.test(m.away_team?.name ?? '')) return false
+      if (FIFA_TOP100_IDS.size > 0) {
+        const homeId = (m.home_team as any)?.external_id
+        const awayId = (m.away_team as any)?.external_id
+        if (!FIFA_TOP100_IDS.has(homeId) && !FIFA_TOP100_IDS.has(awayId)) return false
+      }
+      return true
+    }),
     [matches],
   )
   const hasGroups = groupMatchesMap.size > 0
@@ -1034,9 +1115,10 @@ export default function TournamentProdePage() {
     { key: 'ranking',  label: 'Ranking' },
   ] as { key: typeof tab; label: string }[]
 
-  // Conteo de predicciones completas en partidos todavía abiertos (todas las fases)
-  const unlockedMatches = matches.filter(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified))
-  const filledCount     = unlockedMatches.filter(m => {
+  // Para competiciones planas (amistosos) el contador refleja solo los partidos visibles
+  const countableMatches = hasGroups || knockoutRoundsMap.size > 0 ? matches : flatMatches
+  const unlockedMatches  = countableMatches.filter(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified))
+  const filledCount      = unlockedMatches.filter(m => {
     const p = predMap.get(m.id)
     return p && p.home !== '' && p.away !== ''
   }).length

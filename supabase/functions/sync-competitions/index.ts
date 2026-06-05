@@ -40,6 +40,15 @@ Deno.serve(async (req) => {
     const leagues = json.response ?? []
 
     // Sincronizar todas las temporadas del año en curso (sin filtrar por fecha)
+    const NAME_ES: Record<string, string> = {
+      'International Friendlies': 'Amistosos Internacionales',
+      'Friendlies':               'Amistosos Internacionales',
+      'Club Friendly Games':      'Amistosos de Clubes',
+      'World Cup':                'Copa del Mundo',
+      'UEFA Champions League':    'Champions League',
+      'UEFA Europa League':       'Europa League',
+    }
+
     const competitions = leagues
       .filter((entry: any) => {
         return entry.seasons?.find((s: any) => s.year === currentYear)
@@ -48,7 +57,7 @@ Deno.serve(async (req) => {
         const season = entry.seasons.find((s: any) => s.year === currentYear)
         return {
           external_id:  entry.league.id,
-          name:         entry.league.name,
+          name:         NAME_ES[entry.league.name] ?? entry.league.name,
           logo_url:     entry.league.logo,
           country:      entry.country.name,
           country_flag: entry.country.flag ?? null,
