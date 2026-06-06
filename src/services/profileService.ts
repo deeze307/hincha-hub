@@ -1,6 +1,14 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 
+export async function setAvatarUrl(userId: string, url: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: url })
+    .eq('id', userId)
+  if (error) throw new Error(error.message)
+}
+
 export async function acceptTerms(userId: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')

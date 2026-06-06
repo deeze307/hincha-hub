@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { setAvatarUrl } from '../services/profileService'
 
 export type UserRole = 'user' | 'admin' | 'superadmin'
 
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!profile || profile.avatar_url) return profile
     const googleAvatar = user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null
     if (!googleAvatar) return profile
-    await supabase.from('profiles').update({ avatar_url: googleAvatar }).eq('id', user.id)
+    await setAvatarUrl(user.id, googleAvatar)
     return { ...profile, avatar_url: googleAvatar }
   }
 
