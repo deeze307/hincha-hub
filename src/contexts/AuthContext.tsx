@@ -54,12 +54,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return data as Profile | null
   }
 
+  // Si el perfil no tiene avatar propio pero el usuario inició sesión con Google,
+  // persistir la foto de Google en profiles para que se muestre en todos lados
+  // (ranking incluido). Solo cuando avatar_url está vacío → no pisa fotos subidas a mano.
+  async function syncGoogleAvatar(user: User, profile: Profile | null): Promise<Profile | null> {
+    if (!profile || profile.avatar_url) return profile
+    const googleAvatar = user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null
+    if (!googleAvatar) return profile
+    await supabase.from('profiles').update({ avatar_url: googleAvatar }).eq('id', user.id)
+    return { ...profile, avatar_url: googleAvatar }
+  }
+
   async function applySession(session: Session | null) {
     if (!session?.user) {
       setState({ session: null, user: null, profile: null, loading: false })
       return
     }
-    const profile = await fetchProfile(session.user.id)
+    let profile = await fetchProfile(session.user.id)
+    profile = await syncGoogleAvatar(session.user, profile)
     setState({ session, user: session.user, profile, loading: false })
   }
 

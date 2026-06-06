@@ -4,6 +4,8 @@ import { Plus, Users, Lock, Globe, ChevronRight, Loader2, EyeOff, X, Clock, Info
 import { fetchTournaments, joinTournament, requestJoinTournament } from '../services/tournamentsService'
 import type { Tournament } from '../services/tournamentsService'
 import { useAuth } from '../contexts/AuthContext'
+import { useModal } from '../contexts/ModalContext'
+import { useToast } from '../contexts/ToastContext'
 
 function TournamentInitials({ name }: { name: string }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -14,6 +16,37 @@ function TournamentInitials({ name }: { name: string }) {
   )
 }
 
+// Info de la solicitud de ingreso. `sent`=false → texto previo (confirmación);
+// `sent`=true → recordatorio luego de enviada.
+function JoinInfo({ t, sent }: { t: Tournament; sent: boolean }) {
+  if (t.entry_fee) {
+    return (
+      <p className="text-muted text-sm leading-relaxed">
+        {sent ? 'Solicitaste ingresar al torneo ' : 'Estás por solicitar el ingreso al torneo '}
+        <span className="text-text font-semibold">'{t.name}'</span>. Este tiene un costo de{' '}
+        <span className="text-brand font-semibold">${t.entry_fee.toLocaleString('es-AR')}</span>{' '}
+        el cual deberá ser abonado en efectivo o transferencia al Alias{' '}
+        <span className="text-text font-semibold">{t.entry_fee_alias}</span>.
+        <br /><br />
+        Una vez que realices el pago, enviá el comprobante a{' '}
+        <span className="text-text font-semibold">{t.entry_fee_phone}</span>{' '}
+        para notificarle al administrador del grupo que ya pagaste y te autorice el ingreso.
+        <br /><br />
+        Tu ingreso queda pendiente hasta que el administrador acepte la solicitud.
+      </p>
+    )
+  }
+  return (
+    <p className="text-muted text-sm leading-relaxed">
+      {sent ? 'Solicitaste ingresar al torneo ' : 'Estás por solicitar el ingreso al torneo '}
+      <span className="text-text font-semibold">'{t.name}'</span>.{' '}
+      {sent
+        ? 'Ya le notificamos al administrador de tu solicitud, así que cuando la acepte vas a poder ingresar al torneo.'
+        : 'Tu solicitud quedará pendiente hasta que el administrador la acepte.'}
+    </p>
+  )
+}
+
 type Tab = 'all' | 'mine' | 'managed'
 
 export default function TournamentsPage() {
@@ -21,21 +54,21 @@ export default function TournamentsPage() {
   const navigate    = useNavigate()
   const location    = useLocation()
 
+  const { confirm, openModal } = useModal()
+  const { showToast }          = useToast()
+
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading]         = useState(true)
   const [tab, setTab]                 = useState<Tab>('all')
   const [joining, setJoining]         = useState<string | null>(null)
-  const [joinModal, setJoinModal]     = useState<Tournament | null>(null)
-  const [modalVisible, setModalVisible] = useState(false)
 
-  function openModal(t: Tournament) {
-    setJoinModal(t)
-    setTimeout(() => setModalVisible(true), 10)
-  }
-
-  function closeModal() {
-    setModalVisible(false)
-    setTimeout(() => setJoinModal(null), 300)
+  // Recordatorio de la solicitud ya enviada (badge "Solicitud enviada")
+  function showRequestInfo(t: Tournament) {
+    openModal({
+      header:  <h2 className="text-text font-semibold text-base">Solicitud enviada</h2>,
+      content: <JoinInfo t={t} sent />,
+      footer:  { primary: { label: 'Aceptar', onClick: () => {} } },
+    })
   }
   const [showSyncBanner, setShowSyncBanner] = useState(
     () => (location.state as any)?.justCreated === true
@@ -68,18 +101,34 @@ export default function TournamentsPage() {
   })
 
   async function handleJoin(t: Tournament) {
-    setJoining(t.id)
-    try {
-      if (t.access_type === 'open') {
+    // Torneo abierto: ingreso directo
+    if (t.access_type === 'open') {
+      setJoining(t.id)
+      try {
         await joinTournament(t.id)
-      } else {
-        await requestJoinTournament(t.id)
-        openModal(t)
+        await load()
+      } finally {
+        setJoining(null)
       }
-      await load()
-    } finally {
-      setJoining(null)
+      return
     }
+
+    // Torneo con solicitud: mostrar info (costos, espera) y confirmar antes de enviar
+    confirm({
+      title:          'Solicitar ingreso',
+      message:        <JoinInfo t={t} sent={false} />,
+      confirmLabel:   'Confirmar',
+      confirmVariant: 'primary',
+      onConfirm:      async () => {
+        try {
+          await requestJoinTournament(t.id)
+          await load()
+          showToast('Solicitud enviada', 'success')
+        } catch {
+          showToast('No se pudo enviar la solicitud. Intentá de nuevo.', 'error')
+        }
+      },
+    })
   }
 
   return (
@@ -151,50 +200,9 @@ export default function TournamentsPage() {
               onJoin={() => handleJoin(t)}
               onManage={() => navigate(`/torneos/${t.id}/editar`)}
               onProde={() => navigate(`/torneos/${t.id}/prode`)}
-              onShowInfo={() => openModal(t)}
+              onShowInfo={() => showRequestInfo(t)}
             />
           ))}
-        </div>
-      )}
-      {/* Modal post-solicitud */}
-      {joinModal && (
-        <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${modalVisible ? 'opacity-100' : 'opacity-0'}`}
-          onClick={closeModal}
-        >
-          <div
-            className={`bg-surface border border-border rounded-2xl p-6 w-full max-w-md transition-all duration-300 ease-out ${modalVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
-            onClick={e => e.stopPropagation()}
-          >
-            <h2 className="text-text font-semibold text-[15px] mb-3">Solicitud enviada</h2>
-            {joinModal.entry_fee ? (
-              <p className="text-muted text-sm leading-relaxed">
-                Solicitaste ingresar al torneo{' '}
-                <span className="text-text font-semibold">'{joinModal.name}'</span>, este mismo tiene un costo de{' '}
-                <span className="text-brand font-semibold">${joinModal.entry_fee.toLocaleString('es-AR')}</span>{' '}
-                el cual deberá ser abonado en efectivo o transferencia al Alias{' '}
-                <span className="text-text font-semibold">{joinModal.entry_fee_alias}</span>.
-                <br /><br />
-                Una vez que realices el pago, enviá el comprobante a{' '}
-                <span className="text-text font-semibold">{joinModal.entry_fee_phone}</span>{' '}
-                para notificarle al administrador del grupo que ya pagaste y te autorice el ingreso.
-              </p>
-            ) : (
-              <p className="text-muted text-sm leading-relaxed">
-                Solicitaste ingresar al torneo{' '}
-                <span className="text-text font-semibold">'{joinModal.name}'</span>.
-                Ya le notificamos al administrador de tu solicitud, así que cuando la acepte vas a poder ingresar al torneo.
-              </p>
-            )}
-            <div className="mt-5 flex justify-end">
-              <button
-                onClick={closeModal}
-                className="btn-primary w-full"
-              >
-                Aceptar
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -229,11 +237,11 @@ function TournamentCard({ tournament: t, isSuperAdmin, currentUserId, joining, o
         {/* Access + hidden badges */}
         <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
           {t.access_type === 'open'
-            ? <span className="flex items-center gap-1 bg-green-500/20 border border-green-500/30 text-green-400 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Globe size={9}/> Abierto</span>
-            : <span className="flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Lock size={9}/> Con solicitud</span>
+            ? <span className="flex items-center gap-1 bg-green-950/90 border border-green-500/50 text-green-300 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Globe size={9}/> Abierto</span>
+            : <span className="flex items-center gap-1 bg-yellow-950/90 border border-yellow-500/50 text-yellow-300 text-[10px] font-semibold px-2 py-0.5 rounded-full"><Lock size={9}/> Con solicitud</span>
           }
           {isSuperAdmin && t.is_hidden && (
-            <span className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 bg-red-950/90 border border-red-500/50 text-red-300 text-[10px] font-semibold px-2 py-0.5 rounded-full">
               <EyeOff size={9}/> Oculto
             </span>
           )}

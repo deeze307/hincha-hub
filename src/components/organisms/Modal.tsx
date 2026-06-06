@@ -24,7 +24,7 @@ export default function Modal({
   return (
     <div
       className={[
-        'fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4',
+        'fixed inset-0 z-50 flex items-center justify-center p-4',
         'bg-black/60 backdrop-blur-sm',
         'transition-opacity duration-300',
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none',

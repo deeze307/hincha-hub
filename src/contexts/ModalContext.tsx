@@ -127,13 +127,11 @@ export function ModalProvider({ children }: { children: ReactNode }) {
         <button
           onClick={handlePrimary}
           disabled={primaryLoading}
-          className={[
-            'flex-1 font-semibold py-2.5 px-4 rounded-xl transition-all duration-150',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
+          className={
             options.footer.primary.variant === 'danger'
-              ? 'bg-red-500 hover:bg-red-600 active:scale-[0.97] text-white'
-              : 'btn-primary',
-          ].join(' ')}
+              ? 'flex-1 font-semibold py-2.5 px-4 rounded-[10px] bg-red-500 hover:bg-red-600 active:scale-[0.97] text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed'
+              : 'flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed'
+          }
         >
           {primaryLoading ? 'Cargando...' : options.footer.primary.label}
         </button>

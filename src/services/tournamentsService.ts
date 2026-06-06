@@ -261,9 +261,21 @@ export async function requestJoinTournament(tournamentId: string): Promise<void>
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('No autenticado')
 
+  // upsert: si ya existe una solicitud previa (rechazada, o de una membresía que fue
+  // removida y quedó como 'accepted'), se reabre como 'pending' con fecha nueva en vez
+  // de chocar con el unique constraint (tournament_id, user_id).
   const { error } = await supabase
     .from('join_requests')
-    .insert({ tournament_id: tournamentId, user_id: user.id })
+    .upsert(
+      {
+        tournament_id: tournamentId,
+        user_id:       user.id,
+        status:        'pending',
+        resolved_at:   null,
+        created_at:    new Date().toISOString(),
+      },
+      { onConflict: 'tournament_id,user_id' },
+    )
 
   if (error) throw new Error(error.message)
 }
