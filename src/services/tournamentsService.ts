@@ -278,6 +278,26 @@ export async function requestJoinTournament(tournamentId: string): Promise<void>
     )
 
   if (error) throw new Error(error.message)
+
+  // Notificar push al administrador del torneo (además de la campanita).
+  // No bloqueante: la solicitud ya quedó registrada aunque la notificación falle.
+  try {
+    const [{ data: tournament }, { data: profile }] = await Promise.all([
+      supabase.from('tournaments').select('created_by, name').eq('id', tournamentId).single(),
+      supabase.from('profiles').select('alias, full_name, username').eq('id', user.id).single(),
+    ])
+    if (tournament?.created_by) {
+      const requesterName = profile?.alias ?? profile?.full_name ?? profile?.username ?? 'Alguien'
+      supabase.functions.invoke('send-push', {
+        body: {
+          user_id: tournament.created_by,
+          title:   'Nueva solicitud de ingreso',
+          body:    `${requesterName} solicitó ingresar a "${tournament.name ?? 'tu torneo'}"`,
+          url:     '/solicitudes',
+        },
+      }).catch(() => {})
+    }
+  } catch { /* no bloquear la solicitud por un fallo de notificación */ }
 }
 
 export async function removeParticipant(tournamentId: string, userId: string): Promise<void> {
