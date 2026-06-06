@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { isVisibleMatch } from '../utils/matchFilters'
 
 export interface Team {
   id:          string
@@ -54,7 +55,7 @@ export async function fetchMatchesByCompetition(
 
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []) as unknown as CompetitionMatch[]
+  return (data ?? []).filter(isVisibleMatch) as unknown as CompetitionMatch[]
 }
 
 export function groupMatchesByGroup(

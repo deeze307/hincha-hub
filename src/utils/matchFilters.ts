@@ -3,6 +3,15 @@ import type { CompetitionMatch } from '../services/matchesService'
 // Liga de amistosos internacionales de selecciones en API-Football
 export const FRIENDLIES_EXTERNAL_ID = 10
 
+// Estados de partidos que no deben mostrarse: pospuestos y cancelados.
+// Un partido pospuesto conserva la fecha vieja en API-Football hasta que se
+// confirma la reprogramación, así que lo ocultamos hasta que vuelva como NS.
+export const HIDDEN_MATCH_STATUSES = new Set(['PST', 'CANC'])
+
+export function isVisibleMatch(m: { status: string }): boolean {
+  return !HIDDEN_MATCH_STATUSES.has(m.status)
+}
+
 // Criterios para amistosos: solo desde abril 2026 (hora local), solo selecciones
 // mayores (no juveniles), y solo si al menos un equipo está en el set de top.
 export const FLAT_CUTOFF  = new Date(2026, 3, 1)  // April 1 en hora local (no UTC)

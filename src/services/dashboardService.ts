@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 import type { CompetitionMatch } from './matchesService'
-import { FRIENDLIES_EXTERNAL_ID, isRelevantFriendly } from '../utils/matchFilters'
+import { FRIENDLIES_EXTERNAL_ID, isRelevantFriendly, isVisibleMatch } from '../utils/matchFilters'
 
 export interface FeaturedCompetitionGroup {
   competitionId:            string
@@ -85,7 +85,7 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
     .lt('match_date',  dayEnd.toISOString())
     .order('match_date', { ascending: true })
 
-  const matches = (rawMatches ?? []) as unknown as (CompetitionMatch & { competition_id: string })[]
+  const matches = ((rawMatches ?? []) as any[]).filter(isVisibleMatch) as unknown as (CompetitionMatch & { competition_id: string })[]
 
   // 3. Agrupar por torneo, preservando el orden de inscripción
   const result: TournamentTodayMatches[] = []
@@ -179,7 +179,7 @@ export async function fetchFeaturedMatchesForDate(date: Date): Promise<FeaturedC
       .order('match_date', { ascending: true }),
   ])
 
-  const rawMatches = matchesRes.data ?? []
+  const rawMatches = (matchesRes.data ?? []).filter(isVisibleMatch)
 
   // joinable map: competition_id → first active tournament (for non-enrolled)
   const joinableMap = new Map()

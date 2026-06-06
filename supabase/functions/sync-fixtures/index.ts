@@ -27,17 +27,6 @@ async function apiFetch(path: string) {
   return res.json()
 }
 
-function normalizeStatus(s: string): string {
-  const map: Record<string, string> = {
-    'Not Started': 'NS', 'First Half': '1H', 'Halftime': 'HT',
-    'Second Half': '2H', 'Extra Time': 'ET', 'Penalty In Progress': 'P',
-    'Match Finished': 'FT', 'Match Finished After Extra Time': 'AET',
-    'Match Finished Penalties': 'PEN', 'Break Time': 'BT',
-    'Suspended': 'SUSP', 'Postponed': 'PST', 'Cancelled': 'CANC',
-  }
-  return map[s] ?? s
-}
-
 // Construye mapa teamExternalId → groupName desde el endpoint /standings
 async function buildGroupMap(leagueId: number, season: number): Promise<Map<number, string>> {
   const groupMap = new Map<number, string>()
@@ -218,7 +207,7 @@ Deno.serve(async (_req) => {
           home_penalties: f.score?.penalty?.home ?? null,
           away_penalties: f.score?.penalty?.away ?? null,
           winner_team_id: winnerExtId ? (teamMap.get(winnerExtId) ?? null) : null,
-          status:         normalizeStatus(f.fixture?.status?.long ?? ''),
+          status:         f.fixture?.status?.short ?? 'NS',
           matchday:       f.league?.round ? parseInt(f.league.round.replace(/\D/g, '')) || null : null,
           updated_at:     new Date().toISOString(),
         }
