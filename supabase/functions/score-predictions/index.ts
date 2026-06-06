@@ -70,41 +70,56 @@ Deno.serve(async () => {
     const cfg: ScoringCfg = cfgRow ?? DEFAULT_CFG
     const earlyCutoffMs   = (cfg.early_cutoff_hours ?? 24) * 3_600_000
 
-    // 2. Partidos finalizados con resultado y fecha
-    const { data: matches, error: mErr } = await supabase
-      .from('competition_matches')
-      .select('id, home_score, away_score, match_date')
-      .in('status', ['FT', 'AET', 'PEN'])
-      .not('home_score', 'is', null)
-      .not('away_score', 'is', null)
-
-    if (mErr) throw mErr
-    if (!matches?.length) {
-      return new Response(JSON.stringify({ ok: true, updated: 0, message: 'No finished matches' }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+    // 2. Predicciones completadas (paginadas — evita el límite implícito de 1000 filas
+    //    de PostgREST, que antes truncaba la lista de partidos y dejaba sin puntuar
+    //    los más recientes una vez superados los 1000 partidos finalizados en la BD).
+    const preds: any[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error: pErr } = await supabase
+        .from('match_predictions')
+        .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at, push_notified')
+        .not('home_prediction', 'is', null)
+        .not('away_prediction', 'is', null)
+        .range(from, from + 999)
+      if (pErr) throw pErr
+      if (!data?.length) break
+      preds.push(...data)
+      if (data.length < 1000) break
     }
 
-    const matchIds  = matches.map((m: any) => m.id)
-    const matchMap  = new Map(matches.map((m: any) => [m.id, m]))
-
-    // 3. Predicciones completadas, incluyendo predicted_at y estado previo de notificación
-    const { data: preds, error: pErr } = await supabase
-      .from('match_predictions')
-      .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at, push_notified')
-      .in('match_id', matchIds)
-      .not('home_prediction', 'is', null)
-      .not('away_prediction', 'is', null)
-
-    if (pErr) throw pErr
-    if (!preds?.length) {
+    if (!preds.length) {
       return new Response(JSON.stringify({ ok: true, updated: 0, message: 'No predictions to score' }), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    // 4. Calcular puntos con lógica early/late
-    const rows = preds.map((p: any) => {
+    // 3. Resultados de los partidos efectivamente predichos (en lotes para acotar la
+    //    query a lo que realmente se necesita, sin depender del total global de partidos).
+    const predictedMatchIds = [...new Set(preds.map((p: any) => p.match_id))]
+    const matchMap = new Map<string, any>()
+    for (let i = 0; i < predictedMatchIds.length; i += 300) {
+      const chunk = predictedMatchIds.slice(i, i + 300)
+      const { data, error: mErr } = await supabase
+        .from('competition_matches')
+        .select('id, home_score, away_score, match_date')
+        .in('id', chunk)
+        .in('status', ['FT', 'AET', 'PEN'])
+        .not('home_score', 'is', null)
+        .not('away_score', 'is', null)
+      if (mErr) throw mErr
+      for (const m of (data ?? [])) matchMap.set(m.id, m)
+    }
+
+    // 4. Solo se puntúan predicciones cuyo partido ya finalizó
+    const scorablePreds = preds.filter((p: any) => matchMap.has(p.match_id))
+    if (!scorablePreds.length) {
+      return new Response(JSON.stringify({ ok: true, updated: 0, message: 'No finished matches to score' }), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    // 5. Calcular puntos con lógica early/late
+    const rows = scorablePreds.map((p: any) => {
       const match      = matchMap.get(p.match_id)!
       const matchDate  = match.match_date ? new Date(match.match_date).getTime() : null
       const predictedAt = p.predicted_at  ? new Date(p.predicted_at).getTime()  : 0

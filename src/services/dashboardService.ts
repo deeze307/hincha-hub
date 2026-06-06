@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
 import type { CompetitionMatch } from './matchesService'
+import { FRIENDLIES_EXTERNAL_ID, isRelevantFriendly } from '../utils/matchFilters'
 
 export interface FeaturedCompetitionGroup {
   competitionId:            string
@@ -36,7 +37,7 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
       tournament_id,
       tournaments (
         id, name, competition_id,
-        competition:competitions ( name, logo_url, season_year, country )
+        competition:competitions ( name, logo_url, season_year, country, external_id )
       )
     `)
     .eq('user_id', user.id)
@@ -61,6 +62,7 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
       competitionLogo:    t.competition.logo_url ?? null,
       competitionCountry: t.competition.country ?? '',
       seasonYear:         t.competition.season_year ?? new Date().getFullYear(),
+      externalId:         t.competition.external_id ?? null,
     })
   }
 
@@ -75,8 +77,8 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
     .select(`
       id, competition_id, season_year, match_date, status, round,
       home_score, away_score,
-      home_team:home_team_id ( id, name, logo_url ),
-      away_team:away_team_id ( id, name, logo_url )
+      home_team:home_team_id ( id, name, logo_url, external_id ),
+      away_team:away_team_id ( id, name, logo_url, external_id )
     `)
     .in('competition_id', [...byCompetition.keys()])
     .gte('match_date', dayStart.toISOString())
@@ -88,9 +90,13 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
   // 3. Agrupar por torneo, preservando el orden de inscripción
   const result: TournamentTodayMatches[] = []
   for (const [compId, info] of byCompetition) {
-    const compMatches = matches.filter(
+    let compMatches = matches.filter(
       m => m.competition_id === compId && m.season_year === info.seasonYear,
     )
+    // Amistosos internacionales: aplicar filtros de relevancia (fecha, juveniles, ranking)
+    if (info.externalId === FRIENDLIES_EXTERNAL_ID) {
+      compMatches = compMatches.filter(isRelevantFriendly)
+    }
     if (compMatches.length === 0) continue
     result.push({
       tournamentId:       info.tournamentId,
@@ -107,8 +113,8 @@ export async function fetchMatchesForDate(date: Date): Promise<TournamentTodayMa
 const MATCH_SELECT = `
   id, competition_id, season_year, match_date, status, round, round_order, matchday,
   home_score, away_score,
-  home_team:home_team_id ( id, name, logo_url ),
-  away_team:away_team_id ( id, name, logo_url )
+  home_team:home_team_id ( id, name, logo_url, external_id ),
+  away_team:away_team_id ( id, name, logo_url, external_id )
 `
 
 export async function fetchFeaturedMatchesForDate(date: Date): Promise<FeaturedCompetitionGroup[]> {
@@ -118,7 +124,7 @@ export async function fetchFeaturedMatchesForDate(date: Date): Promise<FeaturedC
   const [featuredRes, regsRes] = await Promise.all([
     supabase
       .from('competitions')
-      .select('id, name, logo_url, season_year, display_order, country')
+      .select('id, name, logo_url, season_year, display_order, country, external_id')
       .eq('featured', true)
       .order('display_order', { ascending: true }),
     user
@@ -155,7 +161,7 @@ export async function fetchFeaturedMatchesForDate(date: Date): Promise<FeaturedC
     extraCompIds.length > 0
       ? supabase
           .from('competitions')
-          .select('id, name, logo_url, season_year, country')
+          .select('id, name, logo_url, season_year, country, external_id')
           .in('id', extraCompIds)
       : Promise.resolve({ data: [] }),
     supabase
@@ -184,9 +190,13 @@ export async function fetchFeaturedMatchesForDate(date: Date): Promise<FeaturedC
   }
 
   function buildGroup(comp) {
-    const compMatches = rawMatches.filter(
+    let compMatches = rawMatches.filter(
       m => m.competition_id === comp.id && m.season_year === comp.season_year,
     )
+    // Amistosos internacionales: aplicar filtros de relevancia (fecha, juveniles, ranking)
+    if (comp.external_id === FRIENDLIES_EXTERNAL_ID) {
+      compMatches = compMatches.filter(isRelevantFriendly)
+    }
     if (compMatches.length === 0) return null
 
     const enrolled = enrolledMap.get(comp.id) ?? null
