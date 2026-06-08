@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Trophy, TrendingUp, Settings, Star, X, Mail, Bell } from 'lucide-react'
+import { Home, Trophy, TrendingUp, Settings, Star, X, Mail, Bell, HelpCircle } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { useAuth } from '../../contexts/AuthContext'
 import logoFull from '../../assets/images/logo2_transparente.png'
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/torneos',      icon: Trophy,     label: 'Torneos',       adminOnly: false, comingSoon: false },
   { to: '/estadisticas', icon: TrendingUp, label: 'Estadísticas',  adminOnly: false, comingSoon: true  },
   { to: '/contacto',     icon: Mail,       label: 'Contacto',      adminOnly: false, comingSoon: false },
+  { to: '/ayuda',        icon: HelpCircle, label: 'Ayuda',         adminOnly: false, comingSoon: false },
   { to: '/configuracion',        icon: Settings, label: 'Configuración',        adminOnly: true, comingSoon: false },
   { to: '/competiciones-admin',  icon: Star,     label: 'Competiciones dest.', adminOnly: true, comingSoon: false },
   { to: '/notificaciones-admin', icon: Bell,     label: 'Notif. admin',         adminOnly: true, comingSoon: false },

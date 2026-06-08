@@ -19,6 +19,7 @@ import AwardResultsPage from './pages/AwardResultsPage'
 import InvitePage from './pages/InvitePage'
 import CompetitionsAdminPage from './pages/CompetitionsAdminPage'
 import ContactPage from './pages/ContactPage'
+import FaqPage from './pages/FaqPage'
 import NotificationsAdminPage from './pages/NotificationsAdminPage'
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/competiciones-admin"   element={<CompetitionsAdminPage />} />
           <Route path="/notificaciones-admin" element={<NotificationsAdminPage />} />
           <Route path="/contacto"            element={<ContactPage />} />
+          <Route path="/ayuda"               element={<FaqPage />} />
           <Route path="/ligas"               element={<Navigate to="/torneos" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/inicio" replace />} />
