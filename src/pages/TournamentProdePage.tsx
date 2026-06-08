@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw, Info, UserMinus } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, Search, X, Trophy, Star, Target, Award, Shield, Link2, RefreshCw, Info, UserMinus, Users } from 'lucide-react'
 import { fetchTournaments, removeParticipant } from '../services/tournamentsService'
 import { useModal } from '../contexts/ModalContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -1608,6 +1608,12 @@ function ProdeRankingTab({
 
   return (
     <>
+      {/* Conteo de participantes */}
+      <div className="flex items-center gap-1.5 text-muted text-xs mb-3">
+        <Users size={13} />
+        <span>{entries.length} participante{entries.length !== 1 ? 's' : ''}</span>
+      </div>
+
       <div className="card overflow-hidden">
         {/* Header */}
         <div className={`grid ${gridBase} gap-2 px-4 py-2.5 border-b border-border bg-elevated/60`}>

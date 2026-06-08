@@ -171,66 +171,97 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              {['Tipo', 'Notificación', 'Fecha', 'Estado'].map(h => (
-                <th key={h} className="px-5 py-3 text-left text-[10px] text-muted font-semibold uppercase tracking-wider whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={4} className="px-5 py-12 text-center">
-                  <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto" />
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-5 py-12 text-center text-muted text-sm">
-                  {query ? 'Sin resultados para esa búsqueda.' : 'No tenés notificaciones.'}
-                </td>
-              </tr>
-            ) : rows.map(n => (
-              <tr
+      {/* Lista — tabla en desktop, tarjetas en mobile */}
+      {loading ? (
+        <div className="card py-12 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="card py-12 text-center text-muted text-sm">
+          {query ? 'Sin resultados para esa búsqueda.' : 'No tenés notificaciones.'}
+        </div>
+      ) : (
+        <>
+          {/* Desktop: tabla */}
+          <div className="card overflow-hidden hidden sm:block">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  {['Tipo', 'Notificación', 'Fecha', 'Estado'].map(h => (
+                    <th key={h} className="px-5 py-3 text-left text-[10px] text-muted font-semibold uppercase tracking-wider whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(n => (
+                  <tr
+                    key={n.id}
+                    onClick={() => handleMarkRead(n)}
+                    className={`border-b border-border/40 last:border-0 transition-colors cursor-pointer ${
+                      n.read ? 'hover:bg-elevated' : 'bg-brand/5 hover:bg-brand/10'
+                    }`}
+                  >
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center shrink-0">
+                          {TYPE_ICON[n.type]}
+                        </div>
+                        <span className="text-muted text-xs">{TYPE_LABEL[n.type]}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className={`text-sm leading-snug ${n.read ? 'text-muted' : 'text-text font-medium'}`}>
+                        {n.text}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-muted text-xs">
+                      {formatDate(n.created_at)}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      {n.read
+                        ? <span className="text-muted-dark text-xs">Leída</span>
+                        : <span className="badge-brand text-[10px]">Nueva</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: tarjetas */}
+          <div className="sm:hidden space-y-3">
+            {rows.map(n => (
+              <button
                 key={n.id}
                 onClick={() => handleMarkRead(n)}
-                className={`border-b border-border/40 last:border-0 transition-colors cursor-pointer ${
-                  n.read ? 'hover:bg-elevated' : 'bg-brand/5 hover:bg-brand/10'
+                className={`card w-full text-left p-4 flex flex-col gap-2 transition-colors ${
+                  n.read ? '' : 'bg-brand/5 border-brand/30'
                 }`}
               >
-                <td className="px-5 py-3.5 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-elevated flex items-center justify-center shrink-0">
                       {TYPE_ICON[n.type]}
                     </div>
                     <span className="text-muted text-xs">{TYPE_LABEL[n.type]}</span>
                   </div>
-                </td>
-                <td className="px-5 py-3.5">
-                  <p className={`text-sm leading-snug ${n.read ? 'text-muted' : 'text-text font-medium'}`}>
-                    {n.text}
-                  </p>
-                </td>
-                <td className="px-5 py-3.5 whitespace-nowrap text-muted text-xs">
-                  {formatDate(n.created_at)}
-                </td>
-                <td className="px-5 py-3.5 whitespace-nowrap">
                   {n.read
-                    ? <span className="text-muted-dark text-xs">Leída</span>
-                    : <span className="badge-brand text-[10px]">Nueva</span>
+                    ? <span className="text-muted-dark text-[11px] shrink-0">Leída</span>
+                    : <span className="badge-brand text-[10px] shrink-0">Nueva</span>
                   }
-                </td>
-              </tr>
+                </div>
+                <p className={`text-sm leading-snug ${n.read ? 'text-muted' : 'text-text font-medium'}`}>
+                  {n.text}
+                </p>
+                <p className="text-muted-dark text-[11px]">{formatDate(n.created_at)}</p>
+              </button>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Paginado */}
       <div className="flex items-center justify-between">

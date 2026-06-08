@@ -40,24 +40,45 @@ function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 
+// Cache de jugadores por competición (una vez por sesión). El filtro por acentos
+// se hace en cliente, así que necesitamos el padrón completo — y paginamos para
+// evitar el límite implícito de 1000 filas de PostgREST (el Mundial supera 1400).
+const playerCache = new Map<string, PlayerOption[]>()
+
+async function fetchAllPlayers(competitionId: string): Promise<PlayerOption[]> {
+  const cached = playerCache.get(competitionId)
+  if (cached) return cached
+
+  const all: PlayerOption[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('players')
+      .select(`
+        id, name, photo_url, nationality, flag_url, position,
+        team:team_id ( id, name, logo_url )
+      `)
+      .eq('competition_id', competitionId)
+      .range(from, from + 999)
+
+    if (error) throw error
+    if (!data?.length) break
+    all.push(...(data as unknown as PlayerOption[]))
+    if (data.length < 1000) break
+  }
+
+  playerCache.set(competitionId, all)
+  return all
+}
+
 export async function searchPlayers(
   query:         string,
   competitionId: string,
   limit =        10,
 ): Promise<PlayerOption[]> {
-  const { data, error } = await supabase
-    .from('players')
-    .select(`
-      id, name, photo_url, nationality, flag_url, position,
-      team:team_id ( id, name, logo_url )
-    `)
-    .eq('competition_id', competitionId)
+  const players = await fetchAllPlayers(competitionId)
+  const words   = query.trim().split(/\s+/).filter(Boolean).map(stripAccents)
 
-  if (error) throw error
-
-  const words = query.trim().split(/\s+/).filter(Boolean).map(stripAccents)
-
-  return (data ?? [] as unknown[])
-    .filter((p: any) => words.every(w => stripAccents(p.name).includes(w)))
-    .slice(0, limit) as unknown as PlayerOption[]
+  return players
+    .filter(p => words.every(w => stripAccents(p.name).includes(w)))
+    .slice(0, limit)
 }

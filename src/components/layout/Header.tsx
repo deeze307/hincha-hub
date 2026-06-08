@@ -152,9 +152,9 @@ export default function Header() {
         </button>
 
         {bellOpen && (
-          <div className="absolute right-0 top-[calc(100%+8px)] w-80 bg-surface border border-border rounded-xl shadow-elevated overflow-hidden z-50">
+          <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] sm:w-80 max-h-[calc(100vh-4.5rem)] flex flex-col bg-surface border border-border rounded-xl shadow-elevated overflow-hidden z-50">
             {/* Header del panel */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <span className="text-text text-sm font-semibold">Notificaciones</span>
               {unreadCount > 0 && (
                 <button
@@ -167,7 +167,7 @@ export default function Header() {
             </div>
 
             {/* Lista */}
-            <div className="divide-y divide-border/50">
+            <div className="divide-y divide-border/50 overflow-y-auto min-h-0">
               {recentNotifs.length === 0 ? (
                 <p className="px-4 py-6 text-center text-muted text-sm">Sin notificaciones</p>
               ) : recentNotifs.map(n => (
@@ -193,7 +193,7 @@ export default function Header() {
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border px-4 py-2.5">
+            <div className="border-t border-border px-4 py-2.5 shrink-0">
               <Link
                 to="/notificaciones"
                 onClick={() => setBellOpen(false)}
