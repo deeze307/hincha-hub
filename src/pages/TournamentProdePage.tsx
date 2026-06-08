@@ -617,11 +617,11 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
     : ['champion', 'top_scorer']
 
   // teamPicks y playerPicks: clave = "type-rank"
-  const [teamPicks,       setTeamPicks]       = useState<Record<string, SelectedTeam   | null>>({})
-  const [playerPicks,     setPlayerPicks]     = useState<Record<string, SelectedPlayer | null>>({})
-  const [savedKeys,       setSavedKeys]       = useState<Set<string>>(new Set())
-  const [bonusIsModified, setBonusIsModified] = useState(false)
-  const [loading,         setLoading]         = useState(true)
+  const [teamPicks,    setTeamPicks]    = useState<Record<string, SelectedTeam   | null>>({})
+  const [playerPicks,  setPlayerPicks]  = useState<Record<string, SelectedPlayer | null>>({})
+  const [savedValues,  setSavedValues]  = useState<Record<string, string>>({})   // key → id guardado en BD
+  const [modifiedKeys, setModifiedKeys] = useState<Set<string>>(new Set())       // keys ya editadas (bloqueadas)
+  const [loading,      setLoading]      = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -629,25 +629,26 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
         const bonuses = await fetchUserBonusPredictions(tournament.id)
         const newTeams:   Record<string, SelectedTeam   | null> = {}
         const newPlayers: Record<string, SelectedPlayer | null> = {}
-        const keys = new Set<string>()
-        let anyModified = false
+        const baseline: Record<string, string> = {}
+        const modified = new Set<string>()
 
         for (const b of bonuses) {
           const key  = `${b.type}-${b.rank}`
           const meta = BONUS_META[b.type as BonusType]
-          keys.add(key)
-          if (b.is_modified) anyModified = true
           if (meta?.kind === 'team' && b.team_name) {
-            newTeams[key] = { id: b.team_id!, name: b.team_name, logo_url: null }
+            newTeams[key] = { id: b.team_id!, name: b.team_name, logo_url: b.team_logo_url ?? null }
+            baseline[key] = b.team_id!
           } else if (meta?.kind === 'player' && b.player_name) {
-            newPlayers[key] = { id: b.player_id!, name: b.player_name, photo_url: null, team: null }
+            newPlayers[key] = { id: b.player_id!, name: b.player_name, photo_url: b.player_photo_url ?? null, team: null }
+            baseline[key] = b.player_id!
           }
+          if (b.is_modified) modified.add(key)
         }
 
         setTeamPicks(newTeams)
         setPlayerPicks(newPlayers)
-        setSavedKeys(keys)
-        setBonusIsModified(anyModified)
+        setSavedValues(baseline)
+        setModifiedKeys(modified)
       } finally {
         setLoading(false)
       }
@@ -655,37 +656,36 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
     load()
   }, [tournament.id])
 
-  const effectiveLocked = locked || bonusIsModified
+  const isFieldLocked = (key: string) => locked || modifiedKeys.has(key)
 
   const handleSave = useCallback(async () => {
-    if (effectiveLocked) return
+    if (locked) return  // bloqueo global: ya empezó el partido final del torneo
+
     const bonuses: BonusPrediction[] = []
 
     for (const bonusType of bonusTypes) {
       const meta = BONUS_META[bonusType]
       for (const { rank } of RANK_META) {
         const key = `${bonusType}-${rank}`
+        if (modifiedKeys.has(key)) continue          // campo ya bloqueado → no se toca
+
+        const pick = meta.kind === 'team' ? teamPicks[key] : playerPicks[key]
+        if (!pick) continue                          // campo vacío → no se guarda nada
+
+        const baseId = savedValues[key]
+        if (baseId === pick.id) continue             // mismo valor que en BD → no es edición
+
+        const isEdit = baseId !== undefined          // ya existía con otro valor → edición (se bloquea)
+
         if (meta.kind === 'team') {
-          const t = teamPicks[key]
-          if (!t) continue
           bonuses.push({
-            tournament_id: tournament.id,
-            type:          bonusType,
-            rank,
-            team_id:       t.id,
-            team_name:     t.name,
-            is_modified:   savedKeys.has(key),
+            tournament_id: tournament.id, type: bonusType, rank,
+            team_id: pick.id, team_name: pick.name, is_modified: isEdit,
           })
         } else {
-          const p = playerPicks[key]
-          if (!p) continue
           bonuses.push({
-            tournament_id: tournament.id,
-            type:          bonusType,
-            rank,
-            player_id:     p.id,
-            player_name:   p.name,
-            is_modified:   savedKeys.has(key),
+            tournament_id: tournament.id, type: bonusType, rank,
+            player_id: pick.id, player_name: pick.name, is_modified: isEdit,
           })
         }
       }
@@ -694,18 +694,18 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
     if (bonuses.length === 0) return
     await saveBonusPredictions(tournament.id, bonuses)
 
-    const newSavedKeys = new Set(savedKeys)
-    let nowModified = false
+    const newSaved    = { ...savedValues }
+    const newModified = new Set(modifiedKeys)
     bonuses.forEach(b => {
       const key = `${b.type}-${b.rank}`
-      if (b.is_modified) nowModified = true
-      newSavedKeys.add(key)
+      newSaved[key] = (b.team_id ?? b.player_id)!
+      if (b.is_modified) newModified.add(key)
     })
-    setSavedKeys(newSavedKeys)
-    if (nowModified) setBonusIsModified(true)
-  }, [effectiveLocked, teamPicks, playerPicks, savedKeys, tournament.id, bonusTypes])
+    setSavedValues(newSaved)
+    setModifiedKeys(newModified)
+  }, [locked, teamPicks, playerPicks, savedValues, modifiedKeys, tournament.id, bonusTypes])
 
-  useImperativeHandle(ref, () => ({ save: handleSave, isLocked: effectiveLocked }), [handleSave, effectiveLocked])
+  useImperativeHandle(ref, () => ({ save: handleSave, isLocked: locked }), [handleSave, locked])
 
   if (loading) {
     return (
@@ -726,10 +726,10 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
         </p>
       </div>
 
-      {bonusIsModified && (
+      {modifiedKeys.size > 0 && (
         <div className="flex items-center gap-2 text-muted text-sm bg-elevated border border-border rounded-xl px-4 py-3">
           <Lock size={14} className="shrink-0" />
-          <span>Ya usaste tu modificación — los bonus no se pueden cambiar más.</span>
+          <span>Ya usaste tu modificación — los campos grisados no pueden volver a modificarse.</span>
         </div>
       )}
 
@@ -764,7 +764,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
                         <AutocompleteTeam
                           value={teamPicks[key] ?? null}
                           onSelect={t => setTeamPicks(prev => ({ ...prev, [key]: t }))}
-                          locked={effectiveLocked}
+                          locked={isFieldLocked(key)}
                           teamType={tournament.team_type}
                           placeholder="Buscar equipo..."
                         />
@@ -772,7 +772,7 @@ const BonusTab = forwardRef<BonusTabHandle, { tournament: Tournament; locked: bo
                         <AutocompletePlayer
                           value={playerPicks[key] ?? null}
                           onSelect={p => setPlayerPicks(prev => ({ ...prev, [key]: p }))}
-                          locked={effectiveLocked}
+                          locked={isFieldLocked(key)}
                           competitionId={tournament.competition_id!}
                           placeholder="Buscar jugador..."
                         />

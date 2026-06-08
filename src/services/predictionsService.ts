@@ -81,16 +81,18 @@ export async function saveMatchPredictions(
 // ─── Bonus predictions ──────────────────────────────────────────
 
 export interface BonusPrediction {
-  id?:            string
-  tournament_id:  string
-  type:           'champion' | 'top_scorer' | 'top_assists' | 'mvp' | 'best_goalkeeper'
-  rank:           1 | 2 | 3
-  team_id?:       string | null
-  player_id?:     string | null
-  team_name?:     string | null
-  player_name?:   string | null
-  points_earned?: number | null
-  is_modified?:   boolean
+  id?:               string
+  tournament_id:     string
+  type:              'champion' | 'top_scorer' | 'top_assists' | 'mvp' | 'best_goalkeeper'
+  rank:              1 | 2 | 3
+  team_id?:          string | null
+  player_id?:        string | null
+  team_name?:        string | null
+  player_name?:      string | null
+  team_logo_url?:    string | null
+  player_photo_url?: string | null
+  points_earned?:    number | null
+  is_modified?:      boolean
 }
 
 export async function fetchUserBonusPredictions(
@@ -106,7 +108,31 @@ export async function fetchUserBonusPredictions(
     .eq('tournament_id', tournamentId)
 
   if (error) throw error
-  return data ?? []
+  const bonuses = (data ?? []) as BonusPrediction[]
+  if (!bonuses.length) return bonuses
+
+  // Enriquecer con logos/fotos (no se guardan en bonus_predictions, se resuelven por id)
+  const teamIds   = [...new Set(bonuses.map(b => b.team_id).filter(Boolean))] as string[]
+  const playerIds = [...new Set(bonuses.map(b => b.player_id).filter(Boolean))] as string[]
+
+  const [teamsRes, playersRes] = await Promise.all([
+    teamIds.length
+      ? supabase.from('teams').select('id, logo_url').in('id', teamIds)
+      : Promise.resolve({ data: [] }),
+    playerIds.length
+      ? supabase.from('players').select('id, photo_url').in('id', playerIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const teamLogos   = new Map((teamsRes.data   ?? []).map((t: any) => [t.id, t.logo_url]))
+  const playerPhotos = new Map((playersRes.data ?? []).map((p: any) => [p.id, p.photo_url]))
+
+  for (const b of bonuses) {
+    if (b.team_id)   b.team_logo_url    = teamLogos.get(b.team_id) ?? null
+    if (b.player_id) b.player_photo_url = playerPhotos.get(b.player_id) ?? null
+  }
+
+  return bonuses
 }
 
 export async function saveBonusPredictions(
