@@ -27,16 +27,25 @@ async function apiFetch(path: string) {
   return res.json()
 }
 
+// "Group Stage" pelado (sin letra) es la tabla general que devuelve API-Football
+// junto a las tablas por grupo; no es un grupo real y no debe usarse como group_name.
+const isPseudoGroupName = (g: string | null | undefined): boolean =>
+  !!g && (g.toLowerCase().includes('ranking') || g.toLowerCase().includes('third'))
+
+const isRealGroupName = (g: string | null | undefined): boolean =>
+  !!g && g.trim() !== 'Group Stage' && !isPseudoGroupName(g)
+
 // Construye mapa teamExternalId → groupName desde el endpoint /standings
 async function buildGroupMap(leagueId: number, season: number): Promise<Map<number, string>> {
   const groupMap = new Map<number, string>()
   try {
     const data = await apiFetch(`/standings?league=${leagueId}&season=${season}`)
     const standings = data?.response?.[0]?.league?.standings ?? []
-    // standings es un array de grupos, cada grupo es un array de equipos
+    // standings es un array de grupos, cada grupo es un array de equipos.
+    // Ignoramos la tabla general "Group Stage" para no pisar el grupo real (Group A, B, …).
     for (const group of standings) {
       for (const entry of group) {
-        if (entry.team?.id && entry.group) {
+        if (entry.team?.id && isRealGroupName(entry.group)) {
           groupMap.set(entry.team.id, entry.group)
         }
       }
@@ -220,31 +229,32 @@ Deno.serve(async (_req) => {
       if (error) throw error
       totalUpserted += rows.length
 
-      // ── Post-proceso: asignar grupo correcto a partidos sin group_name
-      // Aplica a cualquier partido de Group Stage con group_name NULL o pseudo-grupo
-      const { data: ungroupedMatches } = await supabase
+      // ── Post-proceso: reasignar el grupo correcto a partidos de fase de grupos
+      // mal etiquetados (group_name NULL, "Group Stage" sin letra, o pseudo-grupo).
+      // Cada equipo juega en un único grupo, así que derivamos su grupo real de los
+      // partidos que SÍ tienen un grupo válido y corregimos el resto. Se auto-corrige
+      // a medida que la tabla de posiciones se va completando.
+      const { data: groupStageMatches } = await supabase
         .from('competition_matches')
-        .select('id, home_team_id, away_team_id')
+        .select('id, home_team_id, away_team_id, group_name')
         .eq('competition_id', comp.competitionId)
         .eq('round', 'Group Stage')
-        .or('group_name.is.null,group_name.eq.Ranking of third-placed teams')
 
-      for (const m of ungroupedMatches ?? []) {
-        const { data: ref } = await supabase
-          .from('competition_matches')
-          .select('group_name')
-          .eq('competition_id', comp.competitionId)
-          .or(`home_team_id.eq.${m.home_team_id},away_team_id.eq.${m.home_team_id}`)
-          .not('group_name', 'is', null)
-          .neq('group_name', 'Ranking of third-placed teams')
-          .neq('id', m.id)
-          .limit(1)
-          .maybeSingle()
+      const teamToGroup = new Map<string, string>()
+      for (const m of groupStageMatches ?? []) {
+        if (isRealGroupName(m.group_name)) {
+          if (m.home_team_id) teamToGroup.set(m.home_team_id, m.group_name)
+          if (m.away_team_id) teamToGroup.set(m.away_team_id, m.group_name)
+        }
+      }
 
-        if (ref?.group_name) {
+      for (const m of groupStageMatches ?? []) {
+        if (isRealGroupName(m.group_name)) continue
+        const grp = teamToGroup.get(m.home_team_id) ?? teamToGroup.get(m.away_team_id)
+        if (grp && grp !== m.group_name) {
           await supabase
             .from('competition_matches')
-            .update({ group_name: ref.group_name })
+            .update({ group_name: grp })
             .eq('id', m.id)
         }
       }
