@@ -1514,9 +1514,9 @@ function PlayerPointsSheet({
         onClick={handleClose}
         style={{ opacity: entered && !closing ? 1 : 0, transition: 'opacity 0.3s' }}
       />
-      {/* Mobile: bottom sheet */}
+      {/* Mobile: bottom sheet — padding inferior para no quedar tapado por el BottomNav */}
       <div
-        className="sm:hidden relative w-full bg-surface rounded-t-2xl shadow-elevated overflow-hidden"
+        className="sm:hidden relative w-full bg-surface rounded-t-2xl shadow-elevated overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
         style={sheetStyle}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
