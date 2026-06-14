@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useScoringConfig } from '../contexts/ScoringConfigContext'
 import { Trophy, Users, Zap, ChevronRight, Star, Globe2, Shield } from 'lucide-react'
 import logoFull from '../assets/images/logo2_transparente.png'
 import isotipo  from '../assets/images/isotipo.png'
@@ -18,7 +19,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: 'Predecí cada partido',
-    desc: 'Apostá el resultado antes de que empiece. Más puntos si predecís con más de 24 horas de anticipación. Resultado exacto, ganador, goles y más.',
+    desc: 'Apostá el resultado antes de que empiece. Más puntos si predecís con más anticipación. Resultado exacto, ganador, goles y más.',
   },
   {
     icon: Users,
@@ -40,6 +41,7 @@ const STEPS = [
 
 export default function LandingPage() {
   const { user, loading } = useAuth()
+  const { early_cutoff_hours: cutoff } = useScoringConfig()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -286,8 +288,8 @@ export default function LandingPage() {
             ))}
           </div>
           <p className="text-muted-dark text-[11px] mt-4 text-center">
-            <span className="text-green-400 font-semibold">Verde</span> = +24h antes del partido ·{' '}
-            <span className="text-orange-400 font-semibold">Naranja</span> = menos de 24h
+            <span className="text-green-400 font-semibold">Verde</span> = +{cutoff}h antes del partido ·{' '}
+            <span className="text-orange-400 font-semibold">Naranja</span> = menos de {cutoff}h
           </p>
 
           {/* Bonus */}

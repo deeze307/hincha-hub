@@ -9,6 +9,7 @@ import { createInviteLink } from '../services/inviteService'
 import { fetchTournamentRanking } from '../services/rankingService'
 import type { RankingEntry } from '../services/rankingService'
 import { isMatchLocked, calcGroupStandings, type ScoreInput, type TeamRef } from '../utils/prodeScoring'
+import { useScoringConfig } from '../contexts/ScoringConfigContext'
 import { useProdePredictions } from '../hooks/useProdePredictions'
 import { MatchRow } from '../components/molecules/MatchRow'
 import { GroupStandingsTable } from '../components/molecules/GroupStandingsTable'
@@ -28,6 +29,7 @@ export default function TournamentProdePage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { showToast } = useToast()
+  const scoring = useScoringConfig()
   const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
 
   const {
@@ -254,19 +256,19 @@ export default function TournamentProdePage() {
                 <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Sistema de puntuación</p>
                 <p className="text-muted text-xs leading-relaxed">
                   Dependiendo del momento en el que se realice la predicción es el puntaje máximo que recibirá en cada caso.
-                  Si se realiza la predicción de un partido con más de <span className="text-green-400 font-semibold">24hs</span> de antelación, obtendrá el puntaje marcado en <span className="text-green-400 font-semibold">verde</span>, pero si modifica algún resultado o realiza la predicción con menos de <span className="text-yellow-400 font-semibold">24hs</span> de antelación, obtendrá como máximo el puntaje marcado en <span className="text-yellow-400 font-semibold">amarillo</span>.
+                  Si se realiza la predicción de un partido con más de <span className="text-green-400 font-semibold">{scoring.early_cutoff_hours}hs</span> de antelación, obtendrá el puntaje marcado en <span className="text-green-400 font-semibold">verde</span>, pero si modifica algún resultado o realiza la predicción con menos de <span className="text-yellow-400 font-semibold">{scoring.early_cutoff_hours}hs</span> de antelación, obtendrá como máximo el puntaje marcado en <span className="text-yellow-400 font-semibold">amarillo</span>.
                 </p>
                 <div className="space-y-1">
                   <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center mb-1.5">
                     <span />
-                    <span className="text-green-400 text-[10px] font-semibold text-right">≥ 24h antes</span>
-                    <span className="text-yellow-400 text-[10px] font-semibold text-right">&lt; 24h antes</span>
+                    <span className="text-green-400 text-[10px] font-semibold text-right">≥ {scoring.early_cutoff_hours}h antes</span>
+                    <span className="text-yellow-400 text-[10px] font-semibold text-right">&lt; {scoring.early_cutoff_hours}h antes</span>
                   </div>
                   {([
-                    ['Resultado exacto',            12, 6],
-                    ['Ganador + goles de 1 equipo',  8, 4],
-                    ['Solo ganador / empate',         6, 3],
-                    ['Goles de un equipo',            2, 1],
+                    ['Resultado exacto',            scoring.early_exact,        scoring.late_exact],
+                    ['Ganador + goles de 1 equipo', scoring.early_winner_goals, scoring.late_winner_goals],
+                    ['Solo ganador / empate',       scoring.early_winner,       scoring.late_winner],
+                    ['Goles de un equipo',          scoring.early_goals,        scoring.late_goals],
                   ] as [string, number, number][]).map(([label, early, late]) => (
                     <div key={label} className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center">
                       <span className="text-muted text-xs">{label}</span>

@@ -1,9 +1,10 @@
 import type { CompetitionMatch } from '../../services/matchesService'
 import { teamAbbr } from '../../utils/teamUtils'
 import {
-  isMatchLocked, isMatchLate, isMatchLive, formatPredTime, LATE_HOURS,
+  isMatchLocked, isMatchLate, isMatchLive, formatPredTime,
   type ScoreInput, type TeamRef,
 } from '../../utils/prodeScoring'
+import { useScoringConfig } from '../../contexts/ScoringConfigContext'
 import { TeamLogo } from '../atoms/TeamLogo'
 import { ScoreBox } from '../atoms/ScoreBox'
 
@@ -17,8 +18,9 @@ export function MatchRow({
   competitionCountry?: string
   competitionName?:    string
 }) {
+  const { early_cutoff_hours: cutoffHours } = useScoringConfig()
   const locked   = isMatchLocked(match) || pred.is_modified
-  const isLate   = isMatchLate(match)
+  const isLate   = isMatchLate(match, cutoffHours)
   const live     = isMatchLive(match)
   const hasScore = match.home_score != null && match.away_score != null
   const isPast   = hasScore || (match.match_date != null && new Date(match.match_date) < new Date())
@@ -26,7 +28,7 @@ export function MatchRow({
   const predTimeColor = (() => {
     if (!pred.predicted_at || !match.match_date) return null
     const delta = new Date(match.match_date).getTime() - new Date(pred.predicted_at).getTime()
-    return delta >= LATE_HOURS * 3_600_000 ? 'text-green-400' : 'text-orange-400'
+    return delta >= cutoffHours * 3_600_000 ? 'text-green-400' : 'text-orange-400'
   })()
 
   const displayPts = hasScore ? pred.pts : null

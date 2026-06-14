@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { HelpCircle, ChevronDown } from 'lucide-react'
+import { useScoringConfig } from '../contexts/ScoringConfigContext'
 
 interface Faq {
   q: string
@@ -9,6 +10,23 @@ interface Faq {
 const B = ({ children }: { children: ReactNode }) => (
   <span className="text-text font-semibold">{children}</span>
 )
+
+// Respuesta con el umbral de anticipación dinámico desde la config de puntuación.
+function ScoringAnswer() {
+  const { early_cutoff_hours: cutoff } = useScoringConfig()
+  return (
+    <>
+      Sumás puntos según cuánto le acertás a cada partido: más por el <B>resultado exacto</B>,
+      menos por acertar el <B>ganador y los goles de un equipo</B>, y menos aún por acertar
+      solo el <B>ganador</B> o solo los <B>goles</B>. Además premia la anticipación: si cargás
+      tu pronóstico con <B>más de {cutoff} h</B> de anticipación sumás el puntaje completo; dentro de
+      las {cutoff} h (o si modificás un pronóstico) sumás la mitad. En los torneos con <B>bonus</B>
+      {' '}(campeón, goleador, etc.) sumás <B>10 / 5 / 3 pts</B> según aciertes con tu 1ª, 2ª o
+      3ª opción. El detalle exacto de cada torneo está en <B>Bases y condiciones</B>, dentro
+      del prode.
+    </>
+  )
+}
 
 const FAQS: Faq[] = [
   {
@@ -63,18 +81,7 @@ const FAQS: Faq[] = [
   },
   {
     q: '¿Cómo se suman los puntos?',
-    a: (
-      <>
-        Sumás puntos según cuánto le acertás a cada partido: más por el <B>resultado exacto</B>,
-        menos por acertar el <B>ganador y los goles de un equipo</B>, y menos aún por acertar
-        solo el <B>ganador</B> o solo los <B>goles</B>. Además premia la anticipación: si cargás
-        tu pronóstico con <B>más de 24 h</B> de anticipación sumás el puntaje completo; dentro de
-        las 24 h (o si modificás un pronóstico) sumás la mitad. En los torneos con <B>bonus</B>
-        {' '}(campeón, goleador, etc.) sumás <B>10 / 5 / 3 pts</B> según aciertes con tu 1ª, 2ª o
-        3ª opción. El detalle exacto de cada torneo está en <B>Bases y condiciones</B>, dentro
-        del prode.
-      </>
-    ),
+    a: <ScoringAnswer />,
   },
   {
     q: '¿Cómo cambio mi foto de perfil o alias?',

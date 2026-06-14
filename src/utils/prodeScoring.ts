@@ -77,9 +77,9 @@ export function isMatchLocked(match: CompetitionMatch): boolean {
   return Date.now() >= new Date(match.match_date).getTime() - LOCKOUT_HOURS * 3_600_000
 }
 
-export function isMatchLate(match: CompetitionMatch): boolean {
+export function isMatchLate(match: CompetitionMatch, hours: number = LATE_HOURS): boolean {
   if (!match.match_date || isMatchLocked(match)) return false
-  return Date.now() >= new Date(match.match_date).getTime() - LATE_HOURS * 3_600_000
+  return Date.now() >= new Date(match.match_date).getTime() - hours * 3_600_000
 }
 
 export function isMatchLive(match: CompetitionMatch): boolean {
