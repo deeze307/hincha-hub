@@ -6,13 +6,18 @@ import { TeamDetailSheet } from '../TeamDetailSheet'
 import { useTeamDetail } from '../../../hooks/useTeamDetail'
 import { fetchUserPredictionsForMatches } from '../../../services/predictionsService'
 import { isLive, livePeriodLabel } from '../../../hooks/useMatchesForDate'
+import { isMatchLocked } from '../../../utils/prodeScoring'
 import { teamAbbr } from '../../../utils/teamUtils'
+import { PredictButton } from '../../atoms/PredictButton'
+import { QuickPredictModal } from '../prode/QuickPredictModal'
 import type { TeamDetailInfo } from '../../../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../../../services/dashboardService'
 import type { CompetitionMatch } from '../../../services/matchesService'
 
 type TeamRef   = { id: string; name: string; logo_url: string | null }
-type MatchPred = { home: number; away: number }
+type MatchPred = { home: number; away: number; is_modified: boolean }
+
+interface PredictTarget { match: CompetitionMatch; tournamentId: string; existing: MatchPred | null }
 
 const MAX_PER_COMPETITION = 2
 const MAX_COMPETITIONS    = 2
@@ -31,21 +36,23 @@ function TeamLogo({ url, name, size = 20 }: { url: string | null; name: string; 
   )
 }
 
-function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionName }: {
+function MatchRow({ match, pred, onTeamClick, onPredict, competitionCountry, competitionName }: {
   match:               CompetitionMatch
   pred?:               MatchPred
   onTeamClick?:        (team: TeamRef) => void
+  onPredict?:          () => void
   competitionCountry?: string
   competitionName?:    string
 }) {
   const live      = isLive(match.status)
   const hasResult = match.home_score != null && match.away_score != null
+  const canPredict = !!onPredict && !isMatchLocked(match) && !pred?.is_modified
   const time      = match.match_date
-    ? new Date(match.match_date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    ? new Date(match.match_date).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
     : '—'
 
   return (
-    <div className="grid grid-cols-[2.5rem_1fr_auto_1fr] items-center gap-1.5 px-4 py-2.5 border-b border-border/30 last:border-0">
+    <div className={`grid grid-cols-[2.5rem_1fr_auto_1fr] items-center gap-1.5 px-4 ${canPredict ? 'pt-6 pb-2.5' : 'py-2.5'} border-b border-border/30 last:border-0`}>
       <div className="flex flex-col items-center shrink-0">
         {live
           ? <span className="text-green-400 text-[9px] font-bold uppercase leading-tight text-center">{livePeriodLabel(match.status)}</span>
@@ -68,8 +75,13 @@ function MatchRow({ match, pred, onTeamClick, competitionCountry, competitionNam
         )}
       </div>
 
-      {/* Marcador central */}
-      <div className="shrink-0 w-10 text-center">
+      {/* Marcador central (con cargar/editar arriba, alineado al VS) */}
+      <div className="relative shrink-0 w-10 text-center">
+        {canPredict && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1">
+            <PredictButton hasPred={pred != null} onClick={onPredict!} />
+          </div>
+        )}
         {hasResult
           ? <span className={`text-xs font-bold tabular-nums ${live ? 'text-green-400' : 'text-text'}`}>{match.home_score}-{match.away_score}</span>
           : <span className="text-muted-dark text-[11px]">vs</span>}
@@ -98,6 +110,7 @@ export default function MatchesCard() {
   const [groups,  setGroups]  = useState<TournamentTodayMatches[]>([])
   const [loading, setLoading] = useState(true)
   const [predMap, setPredMap] = useState<Map<string, MatchPred>>(new Map())
+  const [predictTarget, setPredictTarget] = useState<PredictTarget | null>(null)
   const navigate = useNavigate()
   const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
 
@@ -181,6 +194,7 @@ export default function MatchesCard() {
                   match={m}
                   pred={predMap.get(m.id)}
                   onTeamClick={(team) => handleTeamClick(team, m, g.tournamentName)}
+                  onPredict={() => setPredictTarget({ match: m, tournamentId: g.tournamentId, existing: predMap.get(m.id) ?? null })}
                   competitionCountry={g.competitionCountry}
                   competitionName={g.tournamentName}
                 />
@@ -200,6 +214,22 @@ export default function MatchesCard() {
       )}
 
       {teamDetail && <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />}
+
+      {predictTarget && (
+        <QuickPredictModal
+          match={predictTarget.match}
+          tournamentId={predictTarget.tournamentId}
+          existing={predictTarget.existing}
+          onClose={() => setPredictTarget(null)}
+          onSaved={(home, away, is_modified) =>
+            setPredMap(prev => {
+              const next = new Map(prev)
+              next.set(predictTarget.match.id, { home, away, is_modified })
+              return next
+            })
+          }
+        />
+      )}
     </div>
   )
 }

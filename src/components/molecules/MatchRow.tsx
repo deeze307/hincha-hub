@@ -35,7 +35,7 @@ export function MatchRow({
 
   const dateStr = match.match_date
     ? new Date(match.match_date).toLocaleString('es-AR', {
-        weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+        weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
       })
     : '—'
 

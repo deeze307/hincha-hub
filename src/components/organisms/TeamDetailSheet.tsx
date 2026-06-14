@@ -277,7 +277,7 @@ export function TeamDetailSheet({ team, competitionId, seasonYear, competitionNa
                 <p className="text-muted text-[11px] text-center">
                   {new Date(nextMatch.match_date).toLocaleString('es-AR', {
                     weekday: 'short', day: '2-digit', month: '2-digit',
-                    hour: '2-digit', minute: '2-digit',
+                    hour: '2-digit', minute: '2-digit', hour12: false,
                   })}
                 </p>
               )}

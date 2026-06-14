@@ -33,21 +33,21 @@ export async function fetchUserPredictions(
 
 export async function fetchUserPredictionsForMatches(
   matchIds: string[],
-): Promise<Map<string, { home: number; away: number }>> {
+): Promise<Map<string, { home: number; away: number; is_modified: boolean }>> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !matchIds.length) return new Map()
 
   const { data } = await supabase
     .from('match_predictions')
-    .select('match_id, home_prediction, away_prediction')
+    .select('match_id, home_prediction, away_prediction, is_modified')
     .eq('user_id', user.id)
     .in('match_id', matchIds)
     .not('home_prediction', 'is', null)
     .not('away_prediction', 'is', null)
 
-  const map = new Map<string, { home: number; away: number }>()
+  const map = new Map<string, { home: number; away: number; is_modified: boolean }>()
   for (const p of (data ?? [])) {
-    map.set(p.match_id, { home: p.home_prediction, away: p.away_prediction })
+    map.set(p.match_id, { home: p.home_prediction, away: p.away_prediction, is_modified: p.is_modified ?? false })
   }
   return map
 }
