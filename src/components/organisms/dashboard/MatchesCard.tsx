@@ -19,8 +19,7 @@ type MatchPred = { home: number; away: number; is_modified: boolean }
 
 interface PredictTarget { match: CompetitionMatch; tournamentId: string; existing: MatchPred | null }
 
-const MAX_PER_COMPETITION = 2
-const MAX_COMPETITIONS    = 2
+// Máximo 6 partidos: 1 competición → hasta 6; varias → 2 competiciones × 3
 
 function TeamLogo({ url, name, size = 20 }: { url: string | null; name: string; size?: number }) {
   if (url) {
@@ -136,9 +135,12 @@ export default function MatchesCard() {
     } satisfies TeamDetailInfo)
   }
 
+  const single   = groups.length === 1
+  const maxComps = single ? 1 : 2
+  const maxPer   = single ? 6 : 3
   const limited = groups
-    .slice(0, MAX_COMPETITIONS)
-    .map(g => ({ ...g, matches: g.matches.slice(0, MAX_PER_COMPETITION) }))
+    .slice(0, maxComps)
+    .map(g => ({ ...g, matches: g.matches.slice(0, maxPer) }))
 
   const totalToday = groups.reduce((sum, g) => sum + g.matches.length, 0)
   const hasMore    = totalToday > limited.reduce((sum, g) => sum + g.matches.length, 0)

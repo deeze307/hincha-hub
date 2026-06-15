@@ -255,8 +255,10 @@ export default function TournamentProdePage() {
               <div className="space-y-2.5">
                 <p className="text-muted-dark text-[11px] font-semibold uppercase tracking-wider">Sistema de puntuación</p>
                 <p className="text-muted text-xs leading-relaxed">
-                  Dependiendo del momento en el que se realice la predicción es el puntaje máximo que recibirá en cada caso.
-                  Si se realiza la predicción de un partido con más de <span className="text-green-400 font-semibold">{scoring.early_cutoff_hours}hs</span> de antelación, obtendrá el puntaje marcado en <span className="text-green-400 font-semibold">verde</span>, pero si modifica algún resultado o realiza la predicción con menos de <span className="text-yellow-400 font-semibold">{scoring.early_cutoff_hours}hs</span> de antelación, obtendrá como máximo el puntaje marcado en <span className="text-yellow-400 font-semibold">amarillo</span>.
+                  Si cargás tu predicción con más de <span className="text-green-400 font-semibold">{scoring.early_cutoff_hours}hs</span> de antelación, sumás el puntaje en <span className="text-green-400 font-semibold">verde</span>; con menos, el de <span className="text-yellow-400 font-semibold">amarillo</span> (½).
+                </p>
+                <p className="text-muted text-xs leading-relaxed">
+                  Podés <span className="text-text font-semibold">modificar</span> una predicción una sola vez. Si la modificás con más de <span className="text-green-400 font-semibold">{scoring.modify_cutoff_hours}hs</span> de antelación, conservás el puntaje completo; dentro de ese plazo, sumás la mitad. Una vez modificada queda bloqueada.
                 </p>
                 <div className="space-y-1">
                   <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center mb-1.5">

@@ -7,27 +7,29 @@ const supabase = createClient(
 )
 
 interface ScoringCfg {
-  early_cutoff_hours: number
-  early_exact:        number
-  early_winner_goals: number
-  early_winner:       number
-  early_goals:        number
-  late_exact:         number
-  late_winner_goals:  number
-  late_winner:        number
-  late_goals:         number
+  early_cutoff_hours:  number
+  modify_cutoff_hours: number
+  early_exact:         number
+  early_winner_goals:  number
+  early_winner:        number
+  early_goals:         number
+  late_exact:          number
+  late_winner_goals:   number
+  late_winner:         number
+  late_goals:          number
 }
 
 const DEFAULT_CFG: ScoringCfg = {
-  early_cutoff_hours: 24,
-  early_exact:        12,
-  early_winner_goals: 8,
-  early_winner:       6,
-  early_goals:        2,
-  late_exact:         6,
-  late_winner_goals:  4,
-  late_winner:        3,
-  late_goals:         1,
+  early_cutoff_hours:  24,
+  modify_cutoff_hours: 8,
+  early_exact:         12,
+  early_winner_goals:  8,
+  early_winner:        6,
+  early_goals:         2,
+  late_exact:          6,
+  late_winner_goals:   4,
+  late_winner:         3,
+  late_goals:          1,
 }
 
 function calcPoints(
@@ -68,7 +70,8 @@ Deno.serve(async () => {
       .single()
 
     const cfg: ScoringCfg = cfgRow ?? DEFAULT_CFG
-    const earlyCutoffMs   = (cfg.early_cutoff_hours ?? 24) * 3_600_000
+    const earlyCutoffMs   = (cfg.early_cutoff_hours  ?? 24) * 3_600_000
+    const modifyCutoffMs  = (cfg.modify_cutoff_hours ?? 8)  * 3_600_000
 
     // 2. Predicciones completadas (paginadas — evita el límite implícito de 1000 filas
     //    de PostgREST, que antes truncaba la lista de partidos y dejaba sin puntuar
@@ -77,7 +80,7 @@ Deno.serve(async () => {
     for (let from = 0; ; from += 1000) {
       const { data, error: pErr } = await supabase
         .from('match_predictions')
-        .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at, push_notified')
+        .select('id, user_id, tournament_id, match_id, home_prediction, away_prediction, predicted_at, push_notified, is_modified')
         .not('home_prediction', 'is', null)
         .not('away_prediction', 'is', null)
         .range(from, from + 999)
@@ -124,9 +127,12 @@ Deno.serve(async () => {
       const matchDate  = match.match_date ? new Date(match.match_date).getTime() : null
       const predictedAt = p.predicted_at  ? new Date(p.predicted_at).getTime()  : 0
 
-      // isEarly: la predicción fue hecha con al menos early_cutoff_hours de anticipación
+      // El umbral depende de si es una predicción nueva o una modificación:
+      //  - nueva  → early_cutoff_hours
+      //  - editada → modify_cutoff_hours (modificar con suficiente anticipación NO resta)
+      const cutoffMs = p.is_modified ? modifyCutoffMs : earlyCutoffMs
       const isEarly = matchDate != null
-        ? (matchDate - predictedAt) >= earlyCutoffMs
+        ? (matchDate - predictedAt) >= cutoffMs
         : true  // sin fecha de partido → puntos completos
 
       return {

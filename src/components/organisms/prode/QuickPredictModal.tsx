@@ -24,7 +24,7 @@ export function QuickPredictModal({
   onClose:      () => void
   onSaved:      (home: number, away: number, isModified: boolean) => void
 }) {
-  const { early_cutoff_hours: cutoff } = useScoringConfig()
+  const { early_cutoff_hours: earlyCutoff, modify_cutoff_hours: modifyCutoff } = useScoringConfig()
   const { showToast } = useToast()
 
   const [visible, setVisible] = useState(false)
@@ -39,9 +39,10 @@ export function QuickPredictModal({
 
   function close() { setVisible(false); setTimeout(onClose, 300) }
 
-  const isLate     = isMatchLate(match, cutoff)
-  const willBeHalf = isLate || !!existing
-  const canSave    = home !== '' && away !== '' && !saving
+  // El umbral aplicable depende de si es nueva o modificación
+  const relevantCutoff = existing ? modifyCutoff : earlyCutoff
+  const willBeHalf     = isMatchLate(match, relevantCutoff)
+  const canSave        = home !== '' && away !== '' && !saving
 
   async function handleSave() {
     if (isMatchLocked(match) || existing?.is_modified) {
@@ -112,13 +113,17 @@ export function QuickPredictModal({
             </div>
           </div>
 
-          {willBeHalf && (
-            <p className="text-yellow-400 text-[11px] text-center mt-4 leading-snug">
-              {existing
-                ? 'Es tu modificación: este pronóstico quedará bloqueado y suma ½ puntos.'
-                : `Faltan menos de ${cutoff}h: este pronóstico suma ½ puntos.`}
+          {existing ? (
+            <p className={`text-[11px] text-center mt-4 leading-snug ${willBeHalf ? 'text-yellow-400' : 'text-muted'}`}>
+              {willBeHalf
+                ? 'Es tu modificación: queda bloqueada y suma ½ puntos.'
+                : 'Es tu modificación: queda bloqueada, pero conserva los puntos completos.'}
             </p>
-          )}
+          ) : willBeHalf ? (
+            <p className="text-yellow-400 text-[11px] text-center mt-4 leading-snug">
+              Faltan menos de {earlyCutoff}h: este pronóstico suma ½ puntos.
+            </p>
+          ) : null}
         </div>
 
         {/* Footer */}

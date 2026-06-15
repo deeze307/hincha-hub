@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { supabase } from '../lib/supabase'
+import { fetchScoringConfig } from './scoringConfigService'
 
 export interface MyTournamentPosition {
   tournamentId:    string
@@ -233,7 +234,9 @@ export async function fetchUserMatchBreakdown(
     .not('away_score', 'is', null)
 
   const matchMap = new Map((matches ?? []).map((m: any) => [m.id, m]))
-  const EARLY_MS = 24 * 3_600_000
+  const cfg       = await fetchScoringConfig()
+  const earlyMs   = (cfg.early_cutoff_hours  ?? 24) * 3_600_000
+  const modifyMs  = (cfg.modify_cutoff_hours ?? 8)  * 3_600_000
 
   return preds
     .map((p: any) => {
@@ -241,7 +244,10 @@ export async function fetchUserMatchBreakdown(
       if (!m) return null
       const matchTime = m.match_date ? new Date(m.match_date).getTime() : null
       const predTime  = p.predicted_at ? new Date(p.predicted_at).getTime() : 0
-      const isLate    = matchTime != null && (matchTime - predTime) < EARLY_MS
+      // ½ pts si la predicción se hizo dentro del umbral correspondiente
+      // (modificación usa su propio umbral; modificar con anticipación = puntos completos)
+      const cutoffMs  = p.is_modified ? modifyMs : earlyMs
+      const isHalf    = matchTime != null && (matchTime - predTime) < cutoffMs
       return {
         matchId:      p.match_id,
         matchDate:    m.match_date,
@@ -254,7 +260,7 @@ export async function fetchUserMatchBreakdown(
         homePred:     p.home_prediction,
         awayPred:     p.away_prediction,
         pointsEarned: p.points_earned,
-        isHalf:       p.is_modified || isLate,
+        isHalf,
       }
     })
     .filter(Boolean)
