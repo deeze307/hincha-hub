@@ -37,6 +37,10 @@ interface AuthContextValue extends AuthState {
   signOut:          () => Promise<void>
   signInWithGoogle: () => Promise<void>
   refreshProfile:   () => Promise<void>
+  resetPassword:    (email: string) => Promise<{ error: string | null }>
+  updatePassword:   (newPassword: string) => Promise<{ error: string | null }>
+  recovery:         boolean   // true cuando se entró por un enlace de recuperación
+  clearRecovery:    () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -45,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     session: null, user: null, profile: null, loading: true,
   })
+  const [recovery, setRecovery] = useState(false)
 
   async function fetchProfile(userId: string): Promise<Profile | null> {
     const { data } = await supabase
@@ -79,7 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => applySession(session))
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
       applySession(session)
     })
 
@@ -119,8 +125,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, profile }))
   }
 
+  async function resetPassword(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth?recovery=1`,
+    })
+    return { error: error?.message ?? null }
+  }
+
+  async function updatePassword(newPassword: string) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    return { error: error?.message ?? null }
+  }
+
+  function clearRecovery() { setRecovery(false) }
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut, signInWithGoogle, refreshProfile }}>
+    <AuthContext.Provider value={{
+      ...state, signIn, signUp, signOut, signInWithGoogle, refreshProfile,
+      resetPassword, updatePassword, recovery, clearRecovery,
+    }}>
       {children}
     </AuthContext.Provider>
   )

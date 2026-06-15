@@ -4,8 +4,10 @@ import { Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import logo from '../assets/images/logo2_transparente.png'
 
+type Mode = 'login' | 'register' | 'forgot' | 'reset'
+
 export default function AuthPage() {
-  const [mode, setMode]       = useState<'login' | 'register'>('login')
+  const [mode, setMode]       = useState<Mode>('login')
   const [showPw, setShowPw]   = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -15,14 +17,29 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
 
-  const { signIn, signUp, signInWithGoogle, user } = useAuth()
+  const {
+    signIn, signUp, signInWithGoogle, user,
+    resetPassword, updatePassword, recovery, clearRecovery,
+  } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const redirectTo = searchParams.get('redirect') ?? '/inicio'
 
+  // No redirigir mientras se está restableciendo la contraseña (sesión de recuperación)
   useEffect(() => {
-    if (user) navigate(redirectTo, { replace: true })
-  }, [user, navigate, redirectTo])
+    if (user && !recovery) navigate(redirectTo, { replace: true })
+  }, [user, recovery, navigate, redirectTo])
+
+  // Al entrar por el enlace del correo, mostrar el formulario de nueva contraseña
+  useEffect(() => {
+    if (recovery) { setMode('reset'); setError(null); setSuccess(null) }
+  }, [recovery])
+
+  function goLogin() {
+    setMode('login')
+    setError(null)
+    setSuccess(null)
+  }
 
   function switchMode() {
     setMode(m => m === 'login' ? 'register' : 'login')
@@ -39,15 +56,38 @@ export default function AuthPage() {
     if (mode === 'login') {
       const { error } = await signIn(email, password)
       if (error) setError(traducirError(error))
-    } else {
+    } else if (mode === 'register') {
       if (!fullName.trim()) { setError('Ingresá tu nombre completo'); setLoading(false); return }
       const { error } = await signUp(email, password, fullName)
       if (error) setError(traducirError(error))
       else setSuccess('¡Revisá tu correo para confirmar la cuenta!')
+    } else if (mode === 'forgot') {
+      const { error } = await resetPassword(email)
+      if (error) setError(traducirError(error))
+      else setSuccess('Te enviamos un enlace para restablecer tu contraseña. Revisá tu correo.')
+    } else if (mode === 'reset') {
+      if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); setLoading(false); return }
+      const { error } = await updatePassword(password)
+      if (error) setError(traducirError(error))
+      else { clearRecovery(); navigate('/inicio', { replace: true }) }
     }
 
     setLoading(false)
   }
+
+  const subtitle = {
+    login:    'Ingresá a tu cuenta',
+    register: 'Creá tu cuenta',
+    forgot:   'Recuperá tu contraseña',
+    reset:    'Elegí una nueva contraseña',
+  }[mode]
+
+  const submitLabel = {
+    login:    'Iniciar sesión',
+    register: 'Crear cuenta',
+    forgot:   'Enviar enlace',
+    reset:    'Cambiar contraseña',
+  }[mode]
 
   return (
     <div className="min-h-screen bg-base flex items-center justify-center px-4 py-10">
@@ -63,9 +103,7 @@ export default function AuthPage() {
               alt="Hincha Hub"
               className="h-28 w-auto object-contain mb-2 drop-shadow-[0_4px_24px_rgba(255,116,3,0.35)]"
             />
-            <p className="text-muted text-sm">
-              {mode === 'login' ? 'Ingresá a tu cuenta' : 'Creá tu cuenta'}
-            </p>
+            <p className="text-muted text-sm">{subtitle}</p>
           </div>
 
           {/* Alertas */}
@@ -94,45 +132,56 @@ export default function AuthPage() {
               />
             )}
 
-            <InputField
-              label="Email"
-              icon={<Mail size={16} />}
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={setEmail}
-            />
+            {/* Email — en todos los modos menos "reset" */}
+            {mode !== 'reset' && (
+              <InputField
+                label="Email"
+                icon={<Mail size={16} />}
+                type="email"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={setEmail}
+              />
+            )}
 
-            {/* Contraseña */}
-            <div className="space-y-2">
-              <label className="label uppercase tracking-wider">Contraseña</label>
-              <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-dark">
-                  <Lock size={16} />
+            {/* Contraseña — en login / register / reset (no en forgot) */}
+            {mode !== 'forgot' && (
+              <div className="space-y-2">
+                <label className="label uppercase tracking-wider">
+                  {mode === 'reset' ? 'Nueva contraseña' : 'Contraseña'}
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-dark">
+                    <Lock size={16} />
+                  </div>
+                  <input
+                    type={showPw ? 'text' : 'password'}
+                    placeholder={mode === 'register' || mode === 'reset' ? 'Mínimo 6 caracteres' : '••••••••'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    className="input input-icon pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw(s => !s)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-dark hover:text-muted transition-colors"
+                  >
+                    {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
-                <input
-                  type={showPw ? 'text' : 'password'}
-                  placeholder={mode === 'register' ? 'Mínimo 6 caracteres' : '••••••••'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  className="input input-icon pr-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(s => !s)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-dark hover:text-muted transition-colors"
-                >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
               </div>
-            </div>
+            )}
 
             {mode === 'login' && (
               <div className="flex justify-end -mt-1">
-                <a href="#" className="text-muted text-xs hover:text-brand transition-colors">
+                <button
+                  type="button"
+                  onClick={() => { setMode('forgot'); setError(null); setSuccess(null) }}
+                  className="text-muted text-xs hover:text-brand transition-colors"
+                >
                   ¿Olvidaste tu contraseña?
-                </a>
+                </button>
               </div>
             )}
 
@@ -141,10 +190,23 @@ export default function AuthPage() {
               disabled={loading}
               className="btn-primary btn-primary-full py-3! text-[15px] mt-1"
             >
-              {loading ? 'Cargando...' : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+              {loading ? 'Cargando...' : submitLabel}
             </button>
+
+            {/* Volver a iniciar sesión — en forgot / reset */}
+            {(mode === 'forgot' || mode === 'reset') && (
+              <button
+                type="button"
+                onClick={goLogin}
+                className="w-full text-center text-muted text-sm hover:text-brand transition-colors mt-1"
+              >
+                Volver a iniciar sesión
+              </button>
+            )}
           </form>
 
+          {/* Login social / cambio de modo — solo en login y register */}
+          {(mode === 'login' || mode === 'register') && (<>
           {/* Divisor */}
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-border" />
@@ -173,6 +235,7 @@ export default function AuthPage() {
               : <>¿Ya tenés cuenta?{' '}<button type="button" onClick={switchMode} className="text-brand font-semibold hover:underline">Ingresar</button></>
             }
           </p>
+          </>)}
         </div>
 
         {mode === 'register' && (
