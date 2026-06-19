@@ -10,6 +10,7 @@ import { isMatchLocked } from '../../../utils/prodeScoring'
 import { teamAbbr } from '../../../utils/teamUtils'
 import { PredictButton } from '../../atoms/PredictButton'
 import { QuickPredictModal } from '../prode/QuickPredictModal'
+import { CompetitionInfoButton } from '../prode/CompetitionInfoButton'
 import type { TeamDetailInfo } from '../../../hooks/useTeamDetail'
 import type { TournamentTodayMatches } from '../../../services/dashboardService'
 import type { CompetitionMatch } from '../../../services/matchesService'
@@ -189,6 +190,14 @@ export default function MatchesCard() {
                 <span className="text-text text-[11px] font-bold uppercase tracking-wide truncate">
                   {g.tournamentName}
                 </span>
+                {g.matches[0]?.competition_id && (
+                  <CompetitionInfoButton
+                    competitionId={g.matches[0].competition_id}
+                    seasonYear={g.matches[0].season_year ?? new Date().getFullYear()}
+                    competitionName={g.tournamentName}
+                    className="ml-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold text-muted hover:text-brand transition-colors"
+                  />
+                )}
               </div>
               {g.matches.map(m => (
                 <MatchRow

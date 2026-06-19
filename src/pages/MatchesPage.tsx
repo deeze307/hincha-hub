@@ -8,6 +8,7 @@ import { isMatchLocked } from '../utils/prodeScoring'
 import { TeamDetailSheet }   from '../components/organisms/TeamDetailSheet'
 import { PredictButton }     from '../components/atoms/PredictButton'
 import { QuickPredictModal } from '../components/organisms/prode/QuickPredictModal'
+import { CompetitionInfoButton } from '../components/organisms/prode/CompetitionInfoButton'
 import { useTeamDetail }     from '../hooks/useTeamDetail'
 import { fetchUserPredictionsForMatches } from '../services/predictionsService'
 import type { TeamDetailInfo } from '../hooks/useTeamDetail'
@@ -141,23 +142,32 @@ function CompetitionSection({ group, predMap, openTeamDetail, onPredict }: {
           : <div className="w-5 h-5 rounded-full bg-brand/30 shrink-0" />}
         <span className="text-text text-xs font-bold uppercase tracking-wider truncate">{group.competitionName}</span>
 
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          {group.isEnrolled ? (
-            <span className="px-1.5 py-0.5 bg-brand/20 text-brand text-[9px] font-bold rounded-full border border-brand/30">
-              Tu prode
+        <div className="ml-auto flex flex-col items-end gap-1 shrink-0">
+          <div className="flex items-center gap-2">
+            {group.isEnrolled ? (
+              <span className="px-1.5 py-0.5 bg-brand/20 text-brand text-[9px] font-bold rounded-full border border-brand/30">
+                Tu prode
+              </span>
+            ) : group.joinableTournamentId ? (
+              <button
+                onClick={() => navigate('/torneos')}
+                className="flex items-center gap-1 px-2.5 py-1 bg-brand/10 border border-brand/30 text-brand text-[10px] font-bold rounded-lg hover:bg-brand/20 transition-colors"
+              >
+                <Trophy size={11} className="shrink-0" />
+                Inscribite
+              </button>
+            ) : null}
+            <span className="text-muted-dark text-[10px]">
+              {group.matches.length} partido{group.matches.length !== 1 ? 's' : ''}
             </span>
-          ) : group.joinableTournamentId ? (
-            <button
-              onClick={() => navigate('/torneos')}
-              className="flex items-center gap-1 px-2.5 py-1 bg-brand/10 border border-brand/30 text-brand text-[10px] font-bold rounded-lg hover:bg-brand/20 transition-colors"
-            >
-              <Trophy size={11} className="shrink-0" />
-              Inscribite
-            </button>
-          ) : null}
-          <span className="text-muted-dark text-[10px]">
-            {group.matches.length} partido{group.matches.length !== 1 ? 's' : ''}
-          </span>
+          </div>
+          {group.competitionId && (
+            <CompetitionInfoButton
+              competitionId={group.competitionId}
+              seasonYear={group.matches[0]?.season_year ?? new Date().getFullYear()}
+              competitionName={group.competitionName}
+            />
+          )}
         </div>
       </div>
 

@@ -35,25 +35,102 @@ const isPseudoGroupName = (g: string | null | undefined): boolean =>
 const isRealGroupName = (g: string | null | undefined): boolean =>
   !!g && g.trim() !== 'Group Stage' && !isPseudoGroupName(g)
 
-// Construye mapa teamExternalId → groupName desde el endpoint /standings
-async function buildGroupMap(leagueId: number, season: number): Promise<Map<number, string>> {
+// Trae /standings: deriva el mapa teamExternalId → groupName Y guarda la tabla de
+// posiciones real en competition_standings (reemplazando la anterior).
+async function syncStandings(
+  leagueId: number, season: number, competitionId: string,
+): Promise<Map<number, string>> {
   const groupMap = new Map<number, string>()
   try {
     const data = await apiFetch(`/standings?league=${leagueId}&season=${season}`)
     const standings = data?.response?.[0]?.league?.standings ?? []
-    // standings es un array de grupos, cada grupo es un array de equipos.
-    // Ignoramos la tabla general "Group Stage" para no pisar el grupo real (Group A, B, …).
+
+    // Si hay grupos reales (Group A, B…) guardamos por grupo; si no, una sola tabla.
+    const hasRealGroups = standings.some((g: any[]) => g.some((e: any) => isRealGroupName(e.group)))
+
+    const rows: object[] = []
     for (const group of standings) {
       for (const entry of group) {
-        if (entry.team?.id && isRealGroupName(entry.group)) {
-          groupMap.set(entry.team.id, entry.group)
-        }
+        if (!entry.team?.id) continue
+        if (isRealGroupName(entry.group)) groupMap.set(entry.team.id, entry.group)
+        if (isPseudoGroupName(entry.group)) continue
+        if (hasRealGroups && !isRealGroupName(entry.group)) continue  // saltear tabla general
+
+        rows.push({
+          competition_id:   competitionId,
+          season_year:      season,
+          group_name:       isRealGroupName(entry.group) ? entry.group : null,
+          rank:             entry.rank ?? 0,
+          team_external_id: entry.team.id,
+          team_name:        entry.team.name ?? null,
+          team_logo_url:    entry.team.logo ?? null,
+          played:           entry.all?.played ?? 0,
+          win:              entry.all?.win    ?? 0,
+          draw:             entry.all?.draw   ?? 0,
+          lose:             entry.all?.lose   ?? 0,
+          goals_for:        entry.all?.goals?.for     ?? 0,
+          goals_against:    entry.all?.goals?.against ?? 0,
+          points:           entry.points ?? 0,
+          updated_at:       new Date().toISOString(),
+        })
       }
     }
+
+    await supabase.from('competition_standings')
+      .delete().eq('competition_id', competitionId).eq('season_year', season)
+    if (rows.length) {
+      const { error } = await supabase.from('competition_standings').insert(rows)
+      if (error) console.error('standings insert error:', error)
+    }
   } catch (e) {
-    console.error('standings fetch failed:', e)
+    console.error('standings sync failed:', e)
   }
   return groupMap
+}
+
+// Guarda el top 10 de goles / asistencias / amarillas / rojas en competition_player_stats.
+async function syncPlayerStats(
+  leagueId: number, season: number, competitionId: string,
+): Promise<void> {
+  const endpoints = [
+    { type: 'goals',        path: 'topscorers',     pick: (s: any) => s?.goals?.total },
+    { type: 'assists',      path: 'topassists',     pick: (s: any) => s?.goals?.assists },
+    { type: 'yellow_cards', path: 'topyellowcards', pick: (s: any) => s?.cards?.yellow },
+    { type: 'red_cards',    path: 'topredcards',    pick: (s: any) => s?.cards?.red },
+  ]
+
+  const rows: object[] = []
+  for (const ep of endpoints) {
+    try {
+      const data = await apiFetch(`/players/${ep.path}?league=${leagueId}&season=${season}`)
+      const list = (data?.response ?? []).slice(0, 10)
+      list.forEach((item: any, i: number) => {
+        const st = item.statistics?.[0] ?? {}
+        rows.push({
+          competition_id:     competitionId,
+          season_year:        season,
+          stat_type:          ep.type,
+          rank:               i + 1,
+          player_external_id: item.player?.id ?? null,
+          player_name:        item.player?.name ?? null,
+          player_photo_url:   item.player?.photo ?? null,
+          team_name:          st.team?.name ?? null,
+          team_logo_url:      st.team?.logo ?? null,
+          value:              ep.pick(st) ?? 0,
+          updated_at:         new Date().toISOString(),
+        })
+      })
+    } catch (e) {
+      console.error(`stats ${ep.type} sync failed:`, e)
+    }
+  }
+
+  await supabase.from('competition_player_stats')
+    .delete().eq('competition_id', competitionId).eq('season_year', season)
+  if (rows.length) {
+    const { error } = await supabase.from('competition_player_stats').insert(rows)
+    if (error) console.error('player_stats insert error:', error)
+  }
 }
 
 Deno.serve(async (_req) => {
@@ -106,9 +183,10 @@ Deno.serve(async (_req) => {
     let totalUpserted = 0
 
     for (const comp of competitions) {
-      // 2. Obtener grupos desde /standings (teamId → groupName)
-      const groupMap = await buildGroupMap(comp.externalId, comp.seasonYear)
+      // 2. Posiciones reales (deriva grupos y guarda la tabla) + estadísticas de jugadores
+      const groupMap = await syncStandings(comp.externalId, comp.seasonYear, comp.competitionId)
       console.log(`Group map size for league ${comp.externalId}:`, groupMap.size)
+      await syncPlayerStats(comp.externalId, comp.seasonYear, comp.competitionId)
 
       // 3. Obtener fixture de API-Football
       const data = await apiFetch(

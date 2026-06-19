@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Loader2, Save, Lock, CheckCircle, ChevronLeft, X, Trophy, Link2, RefreshCw, Info } from 'lucide-react'
+import { Loader2, Save, Lock, CheckCircle, ChevronLeft, X, Trophy, Link2, RefreshCw, Info, BarChart3 } from 'lucide-react'
 import { TeamDetailSheet } from '../components/organisms/TeamDetailSheet'
 import { useTeamDetail } from '../hooks/useTeamDetail'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,7 +8,7 @@ import { useToast } from '../contexts/ToastContext'
 import { createInviteLink } from '../services/inviteService'
 import { fetchTournamentRanking } from '../services/rankingService'
 import type { RankingEntry } from '../services/rankingService'
-import { isMatchLocked, calcGroupStandings, type ScoreInput, type TeamRef } from '../utils/prodeScoring'
+import { calcGroupStandings, type ScoreInput, type TeamRef } from '../utils/prodeScoring'
 import { useScoringConfig } from '../contexts/ScoringConfigContext'
 import { useProdePredictions } from '../hooks/useProdePredictions'
 import { MatchRow } from '../components/molecules/MatchRow'
@@ -16,6 +16,7 @@ import { GroupStandingsTable } from '../components/molecules/GroupStandingsTable
 import { BonusTab, type BonusTabHandle } from '../components/organisms/prode/BonusTab'
 import { KnockoutTab } from '../components/organisms/prode/KnockoutTab'
 import { ProdeRankingTab } from '../components/organisms/prode/ProdeRankingTab'
+import { CompetitionInfoSheet } from '../components/organisms/prode/CompetitionInfoSheet'
 
 const EMPTY_PRED: ScoreInput = {
   home: '', away: '', home_orig: '', away_orig: '',
@@ -33,7 +34,7 @@ export default function TournamentProdePage() {
   const { current: teamDetail, open: openTeamDetail, close: closeTeamDetail } = useTeamDetail()
 
   const {
-    tournament, matches, predMap, loading, refreshing,
+    tournament, predMap, loading, refreshing,
     setPred, refreshMatches, savePredictions,
     groupMatchesMap, knockoutRoundsMap, flatMatches, hasGroups,
     bonusLocked, anyUnlocked,
@@ -44,6 +45,7 @@ export default function TournamentProdePage() {
   const [tab,          setTab]          = useState<Tab>('groups')
   const [rulesOpen,    setRulesOpen]    = useState(false)
   const [rulesVisible, setRulesVisible] = useState(false)
+  const [infoOpen,     setInfoOpen]     = useState(false)
   const [inviteCopied, setInviteCopied] = useState(false)
   const [rankingEntries, setRankingEntries] = useState<RankingEntry[]>([])
   const [rankingLoading, setRankingLoading] = useState(false)
@@ -128,14 +130,6 @@ export default function TournamentProdePage() {
     { key: 'ranking',  label: 'Ranking' },
   ] as { key: Tab; label: string }[]
 
-  // Para competiciones planas (amistosos) el contador refleja solo los partidos visibles
-  const countableMatches = hasGroups || knockoutRoundsMap.size > 0 ? matches : flatMatches
-  const unlockedMatches  = countableMatches.filter(m => !isMatchLocked(m) && !(predMap.get(m.id)?.is_modified))
-  const filledCount      = unlockedMatches.filter(m => {
-    const p = predMap.get(m.id)
-    return p && p.home !== '' && p.away !== ''
-  }).length
-
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-5xl">
 
@@ -190,8 +184,14 @@ export default function TournamentProdePage() {
           </div>
         </div>
 
-        {/* Bases y condiciones */}
-        <div className="flex justify-end">
+        {/* Posiciones y stats + Bases y condiciones */}
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => setInfoOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <BarChart3 size={13} /> Pos y stats
+          </button>
           <button
             onClick={() => { setRulesOpen(true); setTimeout(() => setRulesVisible(true), 10) }}
             className="flex items-center gap-1.5 text-xs text-muted hover:text-text bg-elevated hover:bg-elevated/80 border border-border rounded-lg px-3 py-1.5 transition-colors"
@@ -202,29 +202,21 @@ export default function TournamentProdePage() {
 
         {/* Fila 2: estado / acciones */}
         {tab !== 'ranking' && (
-          <div className="flex items-center justify-between gap-3 pl-11">
+          <div className="flex items-center justify-end gap-3 pl-11">
             {!anyUnlocked && tab !== 'bonus' ? (
               <div className="flex items-center gap-2 text-muted text-sm">
                 <Lock size={14} />
                 <span>Predicciones cerradas</span>
               </div>
             ) : (
-              <>
-                <span className="text-muted text-xs">
-                  {tab === 'bonus'
-                    ? 'Campeón, goleador y más'
-                    : `${filledCount}/${unlockedMatches.length} partidos cargados`
-                  }
-                </span>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="btn-primary flex items-center gap-2 shrink-0"
-                >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
-                  {saved ? 'Guardado' : 'Guardar todo'}
-                </button>
-              </>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="btn-primary flex items-center gap-2 shrink-0"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                {saved ? 'Guardado' : 'Guardar todo'}
+              </button>
             )}
           </div>
         )}
@@ -445,6 +437,16 @@ export default function TournamentProdePage() {
       {/* ── Team detail sheet / modal ── */}
       {teamDetail && (
         <TeamDetailSheet {...teamDetail} onClose={closeTeamDetail} />
+      )}
+
+      {/* ── Posiciones y estadísticas ── */}
+      {infoOpen && tournament.competition_id && (
+        <CompetitionInfoSheet
+          competitionId={tournament.competition_id}
+          seasonYear={(tournament as any).competition?.season_year ?? new Date().getFullYear()}
+          competitionName={compName}
+          onClose={() => setInfoOpen(false)}
+        />
       )}
 
     </div>
