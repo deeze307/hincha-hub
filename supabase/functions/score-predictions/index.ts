@@ -244,10 +244,11 @@ Deno.serve(async () => {
 
       const matchDetailMap = new Map((matchDetails ?? []).map((m: any) => [m.id, m]))
 
-      // Agrupar puntos por usuario
-      const byUser = new Map<string, { pts: number; matches: string[] }>()
+      // Agrupar puntos por usuario + torneo (cada notif lleva al ranking de su torneo)
+      const byKey = new Map<string, { userId: string; tournamentId: string; pts: number; matches: string[] }>()
       for (const r of toNotify) {
-        const entry = byUser.get(r.user_id) ?? { pts: 0, matches: [] }
+        const key   = `${r.user_id}::${r.tournament_id}`
+        const entry = byKey.get(key) ?? { userId: r.user_id, tournamentId: r.tournament_id, pts: 0, matches: [] }
         entry.pts += r.points_earned
         const md = matchDetailMap.get(r.match_id)
         const homeName = md?.home_team?.name
@@ -255,11 +256,11 @@ Deno.serve(async () => {
         if (homeName && awayName) {
           entry.matches.push(`${homeName} vs ${awayName}`)
         }
-        byUser.set(r.user_id, entry)
+        byKey.set(key, entry)
       }
 
       // Obtener usuarios con push_enabled = true
-      const notifyUserIds = [...byUser.keys()]
+      const notifyUserIds = [...new Set([...byKey.values()].map(e => e.userId))]
       const { data: enabledProfiles } = await supabase
         .from('profiles')
         .select('id')
@@ -275,6 +276,13 @@ Deno.serve(async () => {
         : { data: [] }
 
       if (pushSubs?.length) {
+        // Suscripciones agrupadas por usuario
+        const subsByUser = new Map<string, any[]>()
+        for (const sub of pushSubs) {
+          if (!subsByUser.has(sub.user_id)) subsByUser.set(sub.user_id, [])
+          subsByUser.get(sub.user_id)!.push(sub)
+        }
+
         // Importar web-push dinámicamente
         const webpush = (await import('https://esm.sh/web-push@3.6.7')).default
         webpush.setVapidDetails(
@@ -283,22 +291,26 @@ Deno.serve(async () => {
           Deno.env.get('VAPID_PRIVATE_KEY')!,
         )
 
-        await Promise.allSettled(
-          pushSubs.map((sub: any) => {
-            const { pts, matches } = byUser.get(sub.user_id)!
-            const matchText = matches.length === 1
-              ? `tu predicción de ${matches[0]}`
-              : `${matches.length} predicciones`
-            return webpush.sendNotification(
+        // Una notificación por (usuario, torneo) → al ranking de ese torneo
+        const sends: Promise<unknown>[] = []
+        for (const entry of byKey.values()) {
+          const subs = subsByUser.get(entry.userId)
+          if (!subs?.length) continue
+          const matchText = entry.matches.length === 1
+            ? `tu predicción de ${entry.matches[0]}`
+            : `${entry.matches.length} predicciones`
+          for (const sub of subs) {
+            sends.push(webpush.sendNotification(
               { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
               JSON.stringify({
-                title: `¡Sumaste ${pts} punto${pts !== 1 ? 's' : ''}!`,
+                title: `¡Sumaste ${entry.pts} punto${entry.pts !== 1 ? 's' : ''}!`,
                 body:  `Por ${matchText}`,
-                url:   '/partidos',
+                url:   `/torneos/${entry.tournamentId}/ranking`,
               }),
-            )
-          })
-        )
+            ))
+          }
+        }
+        await Promise.allSettled(sends)
       }
 
       // Marcar predicciones como notificadas
