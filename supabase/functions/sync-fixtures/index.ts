@@ -104,6 +104,9 @@ async function syncPlayerStats(
     try {
       const data = await apiFetch(`/players/${ep.path}?league=${leagueId}&season=${season}`)
       const list = (data?.response ?? []).slice(0, 10)
+      // Log de diagnóstico: qué valor devuelve la API para el #1 (para detectar lag de la API)
+      const topVal = ep.pick(list[0]?.statistics?.[0] ?? {})
+      console.log(`stats ${ep.type} league ${leagueId}: ${list.length} jugadores · #1=${list[0]?.player?.name ?? '—'} (${topVal})`)
       list.forEach((item: any, i: number) => {
         const st = item.statistics?.[0] ?? {}
         rows.push({
@@ -125,16 +128,29 @@ async function syncPlayerStats(
     }
   }
 
-  await supabase.from('competition_player_stats')
+  const { error: delErr } = await supabase.from('competition_player_stats')
     .delete().eq('competition_id', competitionId).eq('season_year', season)
+  if (delErr) console.error('player_stats delete error:', delErr)
+
   if (rows.length) {
     const { error } = await supabase.from('competition_player_stats').insert(rows)
     if (error) console.error('player_stats insert error:', error)
+    else console.log(`player_stats league ${leagueId}: ${rows.length} filas reescritas`)
   }
 }
 
 Deno.serve(async (_req) => {
   try {
+    // Pausa nocturna (04:00–07:59 hora Argentina, UTC-3) para ahorrar cuota de API-Football.
+    // Argentina no usa horario de verano, así que el offset es fijo en -3.
+    const hourAR = (new Date().getUTCHours() - 3 + 24) % 24
+    if (hourAR >= 4 && hourAR < 8) {
+      return new Response(
+        JSON.stringify({ ok: true, skipped: `horario nocturno (${hourAR}h ART)` }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     // 1. Obtener todas las competencias con torneos activos
     const { data: tournaments } = await supabase
       .from('tournaments')
@@ -182,11 +198,17 @@ Deno.serve(async (_req) => {
 
     let totalUpserted = 0
 
+    // Las stats de jugadores de API-Football se actualizan lento (no son live como
+    // fixtures/standings). Las sincronizamos solo 1×/hora para ahorrar cuota.
+    const syncStats = new Date().getUTCMinutes() < 15
+
     for (const comp of competitions) {
       // 2. Posiciones reales (deriva grupos y guarda la tabla) + estadísticas de jugadores
       const groupMap = await syncStandings(comp.externalId, comp.seasonYear, comp.competitionId)
       console.log(`Group map size for league ${comp.externalId}:`, groupMap.size)
-      await syncPlayerStats(comp.externalId, comp.seasonYear, comp.competitionId)
+      if (syncStats) {
+        await syncPlayerStats(comp.externalId, comp.seasonYear, comp.competitionId)
+      }
 
       // 3. Obtener fixture de API-Football
       const data = await apiFetch(
