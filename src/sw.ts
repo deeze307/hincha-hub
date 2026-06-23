@@ -2,7 +2,7 @@
 import { clientsClaim } from 'workbox-core'
 import { precacheAndRoute } from 'workbox-precaching'
 import { registerRoute, setCatchHandler } from 'workbox-routing'
-import { NetworkOnly } from 'workbox-strategies'
+import { NetworkOnly, CacheFirst } from 'workbox-strategies'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -12,19 +12,31 @@ clientsClaim()
 // Precache all build assets (JS, CSS, images with hash names)
 precacheAndRoute((self as any).__WB_MANIFEST)
 
+const OFFLINE_CACHE = 'offline-v1'
+const OFFLINE_URL = '/offline.html'
+
+// Íconos de las notificaciones: deben estar SIEMPRE disponibles (incluso offline),
+// porque el SO los pide al renderizar el push y, si fallan, muestra un fallback feo.
+const NOTIF_ASSETS = ['/icon-192.png', '/badge-96.png']
+
+// Servir los íconos de notificación desde caché (CacheFirst) para que nunca falten
+registerRoute(
+  ({ url }) => NOTIF_ASSETS.includes(url.pathname),
+  new CacheFirst({ cacheName: OFFLINE_CACHE }),
+)
+
 // Navigation: always network — no stale cache served
 registerRoute(
   ({ request }) => request.mode === 'navigate',
   new NetworkOnly()
 )
 
-const OFFLINE_CACHE = 'offline-v1'
-const OFFLINE_URL = '/offline.html'
-
-// Cache offline.html at install time so it's always available
+// Cachear offline.html + íconos de notificación al instalar
 self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
-    caches.open(OFFLINE_CACHE).then(cache => cache.add(OFFLINE_URL))
+    caches.open(OFFLINE_CACHE).then(cache =>
+      Promise.allSettled([OFFLINE_URL, ...NOTIF_ASSETS].map(u => cache.add(u)))
+    )
   )
 })
 
