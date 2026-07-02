@@ -181,6 +181,29 @@ Deno.serve(async () => {
       // Fetch all bonus_predictions for tournaments that have award results
       const tournamentIds = [...new Set(awardResults.map((a: any) => a.tournament_id))]
 
+      // El bonus SOLO se otorga cuando el torneo terminó (la final ya se jugó).
+      // Antes de eso, campeón/goleador/asistidor son provisionales y no deben sumar.
+      const { data: tourRows } = await supabase
+        .from('tournaments')
+        .select('id, competition_id')
+        .in('id', tournamentIds)
+
+      const compByTournament = new Map((tourRows ?? []).map((t: any) => [t.id, t.competition_id]))
+      const compIds = [...new Set((tourRows ?? []).map((t: any) => t.competition_id).filter(Boolean))]
+
+      const { data: finals } = compIds.length
+        ? await supabase
+            .from('competition_matches')
+            .select('competition_id')
+            .in('competition_id', compIds)
+            .eq('round', 'Final')
+            .in('status', ['FT', 'AET', 'PEN'])
+            .not('winner_team_id', 'is', null)
+        : { data: [] }
+
+      const finishedComps = new Set((finals ?? []).map((m: any) => m.competition_id))
+      const isTournamentFinished = (tId: string) => finishedComps.has(compByTournament.get(tId))
+
       const { data: bonusPreds, error: bpErr } = await supabase
         .from('bonus_predictions')
         .select('id, user_id, tournament_id, type, rank, team_id, player_id')
@@ -201,7 +224,8 @@ Deno.serve(async () => {
         const bonusRows = bonusPreds.map((bp: any) => {
           const award = awardMap.get(`${bp.tournament_id}:${bp.type}`)
           let pts = 0
-          if (award) {
+          // Solo puntúa si el torneo ya terminó (final jugada)
+          if (award && isTournamentFinished(bp.tournament_id)) {
             const teamMatch   = award.team_id   && bp.team_id   && award.team_id   === bp.team_id
             const playerMatch = award.player_id && bp.player_id && award.player_id === bp.player_id
             if (teamMatch || playerMatch) {

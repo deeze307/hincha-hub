@@ -366,22 +366,25 @@ Deno.serve(async (_req) => {
         .select('id, prode_config')
         .eq('competition_id', comp.competitionId)
 
-      for (const tournament of compTournaments ?? []) {
+      // Los premios (y el bonus que generan) SOLO se resuelven cuando el torneo
+      // terminó: la final ya se jugó. Así no otorgamos bonus provisional y, de paso,
+      // no gastamos cuota de API-Football en topscorers/topassists antes de tiempo.
+      const { data: finalMatch } = await supabase
+        .from('competition_matches')
+        .select('winner_team_id')
+        .eq('competition_id', comp.competitionId)
+        .eq('round', 'Final')
+        .in('status', ['FT', 'AET', 'PEN'])
+        .not('winner_team_id', 'is', null)
+        .limit(1)
+        .maybeSingle()
+
+      for (const tournament of (finalMatch?.winner_team_id ? (compTournaments ?? []) : [])) {
         const bonusTypes: string[] = tournament.prode_config?.bonus_types ?? []
         const awardRows: object[]  = []
 
         // Campeón: equipo que ganó la Final
         if (bonusTypes.includes('champion')) {
-          const { data: finalMatch } = await supabase
-            .from('competition_matches')
-            .select('winner_team_id')
-            .eq('competition_id', comp.competitionId)
-            .eq('round', 'Final')
-            .in('status', ['FT', 'AET', 'PEN'])
-            .not('winner_team_id', 'is', null)
-            .limit(1)
-            .maybeSingle()
-
           if (finalMatch?.winner_team_id) {
             const { data: winTeam } = await supabase
               .from('teams')

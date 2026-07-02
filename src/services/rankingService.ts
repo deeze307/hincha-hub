@@ -2,6 +2,20 @@
 import { supabase } from '../lib/supabase'
 import { fetchScoringConfig } from './scoringConfigService'
 
+// Trae TODAS las filas paginando: PostgREST corta implícitamente en 1000, lo que
+// truncaba los rankings de torneos con muchos participantes × partidos (>1000 preds).
+async function fetchAllPaged(build: () => any): Promise<any[]> {
+  const out: any[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999)
+    if (error) throw error
+    if (!data?.length) break
+    out.push(...data)
+    if (data.length < 1000) break
+  }
+  return out
+}
+
 export interface MyTournamentPosition {
   tournamentId:    string
   tournamentName:  string
@@ -24,14 +38,17 @@ export async function fetchMyTournamentPositions(limit = 5): Promise<MyTournamen
 
   const tIds = regs.map((r: any) => r.tournament_id)
 
-  // Puntos del usuario + todos los puntos de los demás (para calcular rank)
-  const [{ data: myMatchPts }, { data: myBonusPts }, { data: allMatchPts }] = await Promise.all([
-    supabase.from('match_predictions').select('tournament_id, points_earned')
-      .eq('user_id', user.id).in('tournament_id', tIds),
-    supabase.from('bonus_predictions').select('tournament_id, points_earned')
-      .eq('user_id', user.id).in('tournament_id', tIds),
-    supabase.from('match_predictions').select('user_id, tournament_id, points_earned')
-      .in('tournament_id', tIds).not('points_earned', 'is', null),
+  // Puntos del usuario + todos los puntos de los demás (para calcular rank).
+  // Todo paginado: con varios torneos × participantes se superan las 1000 filas.
+  const [myMatchPts, myBonusPts, allMatchPts, allBonusPts] = await Promise.all([
+    fetchAllPaged(() => supabase.from('match_predictions').select('tournament_id, points_earned')
+      .eq('user_id', user.id).in('tournament_id', tIds)),
+    fetchAllPaged(() => supabase.from('bonus_predictions').select('tournament_id, points_earned')
+      .eq('user_id', user.id).in('tournament_id', tIds)),
+    fetchAllPaged(() => supabase.from('match_predictions').select('user_id, tournament_id, points_earned')
+      .in('tournament_id', tIds).not('points_earned', 'is', null)),
+    fetchAllPaged(() => supabase.from('bonus_predictions').select('user_id, tournament_id, points_earned')
+      .in('tournament_id', tIds).not('points_earned', 'is', null)),
   ])
 
   // Mis puntos por torneo
@@ -43,13 +60,18 @@ export async function fetchMyTournamentPositions(limit = 5): Promise<MyTournamen
     myPtsMap.set(b.tournament_id, (myPtsMap.get(b.tournament_id) ?? 0) + (b.points_earned ?? 0))
   }
 
-  // Puntos de todos los usuarios por torneo (para calcular cuántos me superan)
+  // Puntos de todos los usuarios por torneo (para calcular cuántos me superan).
+  // Incluye match + bonus para que el rank coincida con la página de ranking.
   const allPtsMap = new Map<string, Map<string, number>>()
-  for (const p of (allMatchPts ?? [])) {
-    if (!allPtsMap.has(p.tournament_id)) allPtsMap.set(p.tournament_id, new Map())
-    const tMap = allPtsMap.get(p.tournament_id)!
-    tMap.set(p.user_id, (tMap.get(p.user_id) ?? 0) + (p.points_earned ?? 0))
+  const addAll = (rows: any[]) => {
+    for (const p of (rows ?? [])) {
+      if (!allPtsMap.has(p.tournament_id)) allPtsMap.set(p.tournament_id, new Map())
+      const tMap = allPtsMap.get(p.tournament_id)!
+      tMap.set(p.user_id, (tMap.get(p.user_id) ?? 0) + (p.points_earned ?? 0))
+    }
   }
+  addAll(allMatchPts)
+  addAll(allBonusPts)
 
   const results: MyTournamentPosition[] = regs.map((reg: any) => {
     const tId    = reg.tournament_id
@@ -112,14 +134,13 @@ export async function fetchTournamentRanking(tournamentId: string): Promise<Rank
 
   const profileMap = new Map((profileRows ?? []).map((p: any) => [p.id, p]))
 
-  // 2. Puntos de partidos por usuario
-  const { data: matchPreds, error: mpErr } = await supabase
+  // 2. Puntos de partidos por usuario (paginado: con muchos participantes × partidos
+  //    se superan las 1000 filas y PostgREST truncaba, dejando usuarios sin puntos).
+  const matchPreds = await fetchAllPaged(() => supabase
     .from('match_predictions')
     .select('user_id, home_prediction, away_prediction, points_earned')
     .eq('tournament_id', tournamentId)
-    .in('user_id', userIds)
-
-  if (mpErr) throw mpErr
+    .in('user_id', userIds))
 
   // 3. Puntos bonus por usuario
   const { data: bonusPreds, error: bpErr } = await supabase
