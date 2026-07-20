@@ -267,8 +267,8 @@ export default function AwardResultsPage() {
           const isAuto = AUTO_BONUS_TYPES.has(bonusType)
 
           return (
-            <div key={bonusType} className="card overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-elevated/50">
+            <div key={bonusType} className="card">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-elevated/50 rounded-t-[13px]">
                 <Icon size={16} className="text-brand" />
                 <h3 className="text-text text-sm font-semibold">{BONUS_TYPE_LABELS[bonusType]}</h3>
                 {isAuto && !isSaved && (
